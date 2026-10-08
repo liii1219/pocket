@@ -8,6 +8,19 @@ and the video never leaves your browser.
 
 Built for DECO2850 Interaction Design at the University of Queensland.
 
+## Try it — nothing to download
+
+### 👉 **https://liii1219.github.io/pocket/**
+
+| | Link | What you get |
+|---|---|---|
+| MVP | [liii1219.github.io/pocket/mvp/](https://liii1219.github.io/pocket/mvp/) | Opens instantly. No camera. |
+| Full version | [liii1219.github.io/pocket/app/](https://liii1219.github.io/pocket/app/) | Counts your reps and corrects your form with the camera. |
+
+Works on a phone too — the page is served over HTTPS, so the browser will allow the
+camera. Stand your phone up about two metres away and make sure your whole body is in
+frame.
+
 ---
 
 ## Two versions
@@ -17,11 +30,20 @@ Built for DECO2850 Interaction Design at the University of Queensland.
 | [`pocket-mvp/`](pocket-mvp/) | Single HTML file. Double-click it and it runs. No build, no install, works offline. No camera. | 141 |
 | [`pocket/`](pocket/) | Full prototype. React + TypeScript + Vite, with camera-based movement checking. | 1,600 |
 
-### Run the MVP
+### Run it locally instead
 
-Open `pocket-mvp/index.html` in a browser. That is the whole thing.
+Download the repository with **Code → Download ZIP** at the top of this page, or:
 
-### Run the full version
+```bash
+git clone https://github.com/liii1219/pocket.git
+```
+
+#### The MVP
+
+Open `pocket-mvp/index.html` in a browser. That is the whole thing — no install, no
+server, and it works with no internet connection.
+
+#### The full version
 
 ```bash
 cd pocket
