@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# npm install 后由 scripts/setup-assets.mjs 自动复制,不入库(32MB)
+public/mediapipe/
+.DS_Store
+tsconfig.tsbuildinfo

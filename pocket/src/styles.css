@@ -1,0 +1,146 @@
+/* Pocket — 深色、大字、单手可达。为"手机放在地上、手臂伸直看"的场景设计。 */
+
+:root {
+  --bg: #12161c;
+  --panel: #1b212a;
+  --line: #2b3440;
+  --ink: #eef2f6;
+  --muted: #93a1b1;
+  --accent: #7ddcbe;
+  --warn: #f0b866;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 28px 20px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+h1 { font-size: 28px; line-height: 1.2; margin: 4px 0; letter-spacing: -0.01em; }
+h2 { font-size: 20px; margin: 4px 0; }
+.section { margin-top: 22px; color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+
+.muted { color: var(--muted); margin: 0; }
+.small { font-size: 14px; }
+
+button {
+  font: inherit;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: transform .06s ease, background .15s ease;
+}
+button:active { transform: scale(.985); }
+
+.primary { background: var(--accent); color: #10231d; border-color: transparent; font-weight: 650; }
+.primary.big { padding: 18px; font-size: 18px; }
+.ghost { background: transparent; }
+.back { align-self: flex-start; background: transparent; border: none; color: var(--muted); padding: 4px 0; }
+.linky { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
+
+.filebtn {
+  display: block;
+  text-align: center;
+  padding: 18px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #10231d;
+  font-weight: 650;
+  cursor: pointer;
+}
+.filebtn input { display: none; }
+
+.fineprint { color: var(--muted); font-size: 13px; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+/* ---------- gaps ---------- */
+.gaps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.gaps button { width: 100%; display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: baseline; text-align: left; }
+.time { font-variant-numeric: tabular-nums; font-weight: 650; }
+.len { color: var(--accent); font-size: 14px; }
+.ctx { color: var(--muted); font-size: 14px; justify-self: end; }
+
+/* ---------- session ---------- */
+.state-row { display: flex; gap: 18px; flex-wrap: wrap; }
+.chooser { flex: 1 1 200px; }
+.label { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 9px 13px; font-size: 14px; border-radius: 999px; }
+.chip.on { background: var(--accent); color: #10231d; border-color: transparent; font-weight: 600; }
+
+.sore { margin-top: 4px; }
+
+.plan { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.plan li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.plan-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dose { color: var(--accent); font-size: 14px; white-space: nowrap; }
+.reason { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+.tag { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+
+/* ---------- coach ---------- */
+.coach { display: flex; flex-direction: column; gap: 14px; }
+.coach-head h2 { margin: 0; font-size: 26px; }
+.cues { display: flex; gap: 10px; margin: 6px 0 0; }
+.cues span { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 14px; color: var(--muted); }
+
+.stage { position: relative; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+.cam, .overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cam { object-fit: cover; transform: scaleX(-1); }
+.stage-cover {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; padding: 16px;
+  background: rgba(18, 22, 28, .92); text-align: center;
+  overflow-y: auto;   /* 小屏上内容比画面高时可滚,不被裁掉 */
+}
+.stage-cover p { font-size: 14px; }
+.stage-cover button { padding: 11px 16px; }
+.stage-cover p { color: var(--muted); margin: 0; }
+
+.readout { display: flex; align-items: center; gap: 16px; }
+.count { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; flex: 0 0 auto; }
+.count span { font-size: 20px; color: var(--muted); font-weight: 500; }
+.feedback { margin: 0; font-size: 17px; }
+.feedback.unsure { color: var(--warn); }
+
+.stop-if { color: var(--muted); font-size: 14px; margin: 0; border-left: 2px solid var(--warn); padding-left: 12px; }
+
+.actions { display: flex; gap: 10px; }
+.actions button { flex: 1; }
+.progress { text-align: center; color: var(--muted); font-size: 14px; margin: 14px 0 0; }
+
+.done { justify-content: center; min-height: 60vh; }
+
+/* ---------- 动作示意图 ---------- */
+.diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+  margin-bottom: 4px;
+}
+.diagram { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; max-width: none; margin: 0; }
+.diagram figure { margin: 0; flex: 0 0 84px; text-align: center; }
+.diagram svg { width: 84px; height: 104px; display: block; }
+.diagram figcaption { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.diagram .arrow { flex: 0 0 34px; }
+.diagram .arrow svg { width: 34px; height: 20px; }

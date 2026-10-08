@@ -1,0 +1,16 @@
+# 依赖,npm install 自动装
+node_modules/
+dist/
+
+# MediaPipe wasm,npm install 后由 scripts/setup-assets.mjs 自动复制(32MB)
+pocket/public/mediapipe/
+
+# 课程讲义和他人作业,版权不属于本仓库
+课件/
+
+.DS_Store
+*.tsbuildinfo
+
+# 已提交的作业文件,不入库
+Project Proposal*.docx
+Project Proposal*.pdf
