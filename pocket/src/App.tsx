@@ -21,15 +21,14 @@ type Screen = 'time' | 'session' | 'coach'
 const AREAS: BodyArea[] = ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', 'wrist']
 
 /**
- * 时长选项。
- * 受访者说工作日五到十分钟最现实,所以默认停在 10 ——
- * 但人在家、或者正好有一段长空档时也该让他用得上,所以放到 20。
+ * 时长上限 20 分钟。
+ * 受访者说工作日五到十分钟最现实,默认落在 10 ——
+ * 但在家、或者碰上一段长空档时也该用得上,所以让人自己填到 20。
+ * 不做成固定几档:固定档位配上"数量"之后会出现四个档位显示同一个数字的情况,
+ * 时长选项就失去意义了。
  */
-const CHOICES = [5, 10, 15, 20] as const
-
-/** 动作数量。'auto' 表示按时长自己定。 */
-const COUNTS = ['auto', 3, 5, 8] as const
-type CountChoice = (typeof COUNTS)[number]
+const MAX_MIN = 20
+const MAX_ITEMS = 10
 
 const THEME_KEY = 'pocket.theme.v1'
 type Theme = 'light' | 'dark'
@@ -72,14 +71,15 @@ export default function App() {
    * 后一种便宜得多。
    */
   const [alone, setAlone] = useState(false)
-  const [count, setCount] = useState<CountChoice>('auto')
+  /** null = 让系统按时长定 */
+  const [count, setCount] = useState<number | null>(null)
   const [theme, toggleTheme] = useTheme()
 
   const session = useMemo(
     () =>
       composeSession({
         minutes, place, sore, energy, quietOnly: place !== 'gym', alone,
-        maxItems: count === 'auto' ? undefined : count,
+        maxItems: count ?? undefined,
       }),
     [minutes, place, sore, energy, alone, count],
   )
@@ -175,39 +175,51 @@ export default function App() {
           {theme === 'light' ? 'Dark' : 'Light'}
         </button>
       </div>
-      <p className="muted">How long have you got right now?</p>
 
-      <ul className="gaps">
-        {CHOICES.map((m) => {
-          const n = composeSession({
-            minutes: m, place, sore, energy, quietOnly: place !== 'gym', alone,
-            maxItems: count === 'auto' ? undefined : count,
-          }).items.length
-          return (
-            <li key={m}>
-              <button onClick={() => { setMinutes(m); setScreen('session') }}>
-                <span className="time">{m} minutes</span>
-                <span className="len">{n} movements</span>
-                <span className="ctx" />
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      <label className="field">
+        <span className="label">How long have you got right now?</span>
+        <div className="field-row">
+          <input
+            type="range"
+            min={1}
+            max={MAX_MIN}
+            value={minutes}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+          />
+          <output>{minutes} min</output>
+        </div>
+      </label>
 
-      <div className="alone">
-        <p className="label">How many movements?</p>
+      <div className="field">
+        <span className="label">How many movements?</span>
+        <div className="field-row">
+          <input
+            type="range"
+            min={1}
+            max={MAX_ITEMS}
+            value={count ?? session.items.length}
+            disabled={count === null}
+            onChange={(e) => setCount(Number(e.target.value))}
+          />
+          <output>{count === null ? `${session.items.length} (auto)` : count}</output>
+        </div>
         <div className="chips">
-          {COUNTS.map((c) => (
-            <button key={c} className={count === c ? 'chip on' : 'chip'} onClick={() => setCount(c)}>
-              {c === 'auto' ? 'Let it decide' : c}
+          <button
+            className={count === null ? 'chip on' : 'chip'}
+            onClick={() => setCount(null)}
+          >
+            Let it decide
+          </button>
+          {count !== null && (
+            <button className="chip" onClick={() => setCount(null)}>
+              Reset
             </button>
-          ))}
+          )}
         </div>
       </div>
 
-      <div className="alone">
-        <p className="label">Anyone around?</p>
+      <div className="field">
+        <span className="label">Anyone around?</span>
         <div className="chips">
           <button className={!alone ? 'chip on' : 'chip'} onClick={() => setAlone(false)}>
             People nearby
@@ -218,10 +230,38 @@ export default function App() {
         </div>
         <p className="alone-hint">
           {alone
-            ? 'You get the full session.'
+            ? 'You get the full session, including the ones that look like exercising.'
             : 'You only get movements that look like stretching at a desk.'}
         </p>
       </div>
+
+      {/* 🔴 配不出来要当场说清楚,而且说清楚是被什么拦住的 */}
+      {session.items.length === 0 ? (
+        <p className="summary warn">
+          Nothing fits in {minutes} minute{minutes === 1 ? '' : 's'}. Try one or two more.
+        </p>
+      ) : (
+        <>
+          <p className="summary">
+            {session.items.length} movement{session.items.length === 1 ? '' : 's'}, about{' '}
+            {session.estimatedMinutes} min
+          </p>
+          {session.shortfall === 'time' && (
+            <p className="summary warn">
+              You asked for {session.wanted}. Only {session.items.length} fit in {minutes} minutes.
+            </p>
+          )}
+          {session.shortfall === 'pool' && (
+            <p className="summary warn">
+              You asked for {session.wanted}, and there are only {session.items.length}{' '}
+              {alone ? 'that suit this setting' : 'quiet enough for people being around'}.
+            </p>
+          )}
+          <button className="primary big" onClick={() => setScreen('session')}>
+            See the session
+          </button>
+        </>
+      )}
 
       <PhoneQR />
 

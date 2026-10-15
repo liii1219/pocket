@@ -166,4 +166,37 @@ describe('composeSession', () => {
     const spent = s.items.reduce((n, i) => n + i.movement.costSeconds, 0)
     expect(spent).toBeLessThanOrEqual(5 * 60 - 60)
   })
+
+  /* --- 配不出来时要说清楚被什么拦住 --------------------------------- */
+
+  it('排满了就没有缺口', () => {
+    const s = composeSession({ ...base, minutes: 20, maxItems: 3 })
+    expect(s.items).toHaveLength(3)
+    expect(s.shortfall).toBe('none')
+  })
+
+  it('时间不够 → 报 time,而且池子里确实还有没用上的', () => {
+    const s = composeSession({ ...base, minutes: 3, maxItems: 8 })
+    expect(s.items.length).toBeLessThan(8)
+    expect(s.shortfall).toBe('time')
+  })
+
+  it('动作本身不够 → 报 pool', () => {
+    // 时间给足,但要的比库里能用的还多
+    const s = composeSession({ ...base, minutes: 20, maxItems: 30 })
+    expect(s.shortfall).toBe('pool')
+  })
+
+  it('有人在场时池子更小,缺口要如实报告', () => {
+    const many = composeSession({ ...base, minutes: 20, maxItems: 30, alone: true })
+    const few = composeSession({ ...base, minutes: 20, maxItems: 30, alone: false })
+    expect(few.items.length).toBeLessThanOrEqual(many.items.length)
+    expect(few.shortfall).toBe('pool')
+  })
+
+  it('wanted 记录的是用户要的数量,不是实际给的', () => {
+    const s = composeSession({ ...base, minutes: 3, maxItems: 8 })
+    expect(s.wanted).toBe(8)
+    expect(s.items.length).toBeLessThan(8)
+  })
 })

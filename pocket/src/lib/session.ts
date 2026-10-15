@@ -31,8 +31,19 @@ export interface SessionItem {
   reason: string
 }
 
+/**
+ * 为什么没排满。
+ * 用户自己填数量之后,"要五个只给了三个"必须说清楚原因 ——
+ * 是时间不够,还是安静的动作本来就只有这么多。默默少给等于骗人。
+ */
+export type Shortfall = 'none' | 'time' | 'pool'
+
 export interface Session {
   items: SessionItem[]
+  /** 想要的数量没满足时,是什么限制住了 */
+  shortfall: Shortfall
+  /** 用户要的数量(没指定就是自动算的那个) */
+  wanted: number
   /** 预计耗时(分钟,向上取整) */
   estimatedMinutes: number
   /** 整节课的一句话说明,显示在最上面 */
@@ -161,8 +172,24 @@ export function composeSession(input: SessionInput): Session {
     }
   }
 
+  /**
+   * 没排满的话是什么拦住的?按**根本限制**判,不按表面现象。
+   *
+   * 要的比符合条件的动作总数还多 → 再多时间也没用,是动作不够(pool)。
+   * 否则就是时间不够(time)。
+   *
+   * 反过来写会出错:要 30 个、库里 18 个、时间刚好差一点塞不下最后两个,
+   * 看起来"还有没用上的"就报成时间不够 —— 但真正的原因是库里压根没有 30 个。
+   */
+  let shortfall: Shortfall = 'none'
+  if (items.length < cap) {
+    shortfall = cap > ordered.length ? 'pool' : 'time'
+  }
+
   return {
     items,
+    shortfall,
+    wanted: cap,
     estimatedMinutes: Math.ceil(spent / 60),
     headline: headlineFor(input, items.length),
   }
