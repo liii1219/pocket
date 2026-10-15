@@ -113,3 +113,39 @@ export function insideFrame(lms: Landmark[], idx: number[], margin = 0.02): bool
     return p.x > margin && p.x < 1 - margin && p.y > margin && p.y < 1 - margin
   })
 }
+
+/**
+ * 看不清的时候,告诉用户**该怎么办**,而不是只说"看不清"。
+ *
+ * 用户测试里出现的情况:人坐在笔记本前做深蹲,画面只到腰,膝和踝根本不在框里。
+ * 原来一律回"I cannot see you well enough",用户不知道是光线问题、站位问题还是坏了。
+ * 这里按缺哪一段给出具体动作。
+ */
+export function framingHint(lms: Landmark[], idx: number[]): string {
+  if (lms.length === 0) return 'Stand where the camera can see you.'
+
+  const missing = (i: number) => {
+    const p = lms[i]
+    return p == null || (p.visibility ?? 0) < 0.5
+  }
+  const outside = (i: number) => {
+    const p = lms[i]
+    return p != null && (p.x <= 0.02 || p.x >= 0.98 || p.y <= 0.02 || p.y >= 0.98)
+  }
+  const bad = (i: number) => missing(i) || outside(i)
+
+  const needsFeet = idx.includes(LM.leftAnkle) || idx.includes(LM.rightAnkle)
+  const feetBad = bad(LM.leftAnkle) && bad(LM.rightAnkle)
+  const kneesBad = bad(LM.leftKnee) && bad(LM.rightKnee)
+  const hipsBad = bad(LM.leftHip) && bad(LM.rightHip)
+
+  if (needsFeet && feetBad) {
+    if (hipsBad) return 'Too close. Step back until your whole body fits in the picture.'
+    if (kneesBad) return 'I can only see your upper body. Move the camera back, or put it on the floor.'
+    return 'Your feet are out of shot. Step back a little.'
+  }
+  if (bad(LM.leftShoulder) && bad(LM.rightShoulder)) {
+    return 'I have lost your shoulders. Face the camera and make sure the room is lit.'
+  }
+  return 'I cannot see you well enough to check this. Try standing side-on to the camera.'
+}

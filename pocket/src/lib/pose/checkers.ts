@@ -11,7 +11,7 @@
  *    真正的塌腰判定需要深度相机或腰部惯性传感器。
  */
 
-import { angleDeg, insideFrame, LM, mid, tiltFromVerticalDeg, visibleEnough, type Landmark } from './angles'
+import { angleDeg, framingHint, insideFrame, LM, mid, tiltFromVerticalDeg, visibleEnough, type Landmark } from './angles'
 
 export type Phase = 'up' | 'down'
 
@@ -120,7 +120,7 @@ const SQUAT_TH: Thresholds = { down: 140, up: 160, depth: 110, minMs: 1200 }
 export function checkSquat(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
 ): CheckOutput {
   if (!visibleEnough(lms, SQUAT_IDX) || !insideFrame(lms, SQUAT_IDX)) {
-    return { ...state, ...NOT_VISIBLE }
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, SQUAT_IDX) }
   }
   // 画面坐标只用来判"看不看得见"。角度一律用 world(米制三维),否则机位一变角度就偏。
   const W = world ?? lms
@@ -150,7 +150,7 @@ const HINGE_TH: Thresholds = { down: 140, up: 165, depth: 120, minMs: 1200 }
 export function checkHinge(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
 ): CheckOutput {
   if (!visibleEnough(lms, HINGE_IDX) || !insideFrame(lms, HINGE_IDX)) {
-    return { ...state, ...NOT_VISIBLE }
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, HINGE_IDX) }
   }
   const W = world ?? lms
   const shoulder = mid(W[LM.leftShoulder], W[LM.rightShoulder])
@@ -185,7 +185,7 @@ const SHOULDER_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftElbow, LM.rightE
  */
 export function checkShoulder(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
 ): CheckOutput {
-  if (!visibleEnough(lms, SHOULDER_IDX)) return { ...state, ...NOT_VISIBLE }
+  if (!visibleEnough(lms, SHOULDER_IDX)) return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, SHOULDER_IDX) }
   const W = world ?? lms
   const hip = mid(W[LM.leftHip], W[LM.rightHip])
   const shoulder = mid(W[LM.leftShoulder], W[LM.rightShoulder])

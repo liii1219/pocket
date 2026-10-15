@@ -42,10 +42,23 @@ describe('composeSession', () => {
     expect(s.headline).toMatch(/Nothing hard today/)
   })
 
-  it('一节课里同一个动作模式不重复', () => {
+  it('力量动作不重复模式,活动度动作不重复部位', () => {
+    // 规则不是"pattern 全不同":颈、腕、踝都是 mobility,它们该能同时出现。
+    // 真正的规则是 —— 力量动作按 pattern 去重,活动度动作按目标部位去重。
     const s = composeSession({ ...base, minutes: 30 })
-    const patterns = s.items.map((i) => i.movement.pattern)
-    expect(new Set(patterns).size).toBe(patterns.length)
+    const keys = s.items.map((i) =>
+      i.movement.pattern === 'mobility'
+        ? `mobility:${i.movement.loads.join(',')}`
+        : i.movement.pattern,
+    )
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('加了坐姿动作之后,有人在场也能排满一节课', () => {
+    // 回归:动作全挤在四个 pattern 里时,按 pattern 去重会把课压到四个,
+    // 加的动作越多课反而越短。
+    const s = composeSession({ ...base, minutes: 10, alone: false })
+    expect(s.items.length).toBeGreaterThanOrEqual(5)
   })
 
   it('每个动作都带一句为什么', () => {

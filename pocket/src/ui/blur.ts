@@ -15,6 +15,8 @@
  *   3. 把只剩人的暂存画布叠回输出画布
  */
 
+import type { Landmark } from '../lib/pose/angles'
+
 /** 模糊半径。太小看得出是谁,太大像坏掉。12px 在 640×480 上是清楚但认不出的程度。 */
 const BLUR_PX = 12
 
@@ -57,12 +59,20 @@ export function drawBlurred(
   maskData: Float32Array | null,
   maskW = 0,
   maskH = 0,
+  landmarks: Landmark[] = [],
 ): void {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const { width: w, height: h } = canvas
 
+  // 🔴 没有蒙版时的兜底:用关键点围出人所在的区域。
+  // 分割蒙版在某些设备/委托组合下拿不到(用户测试里就遇到了:按钮开着但画面没虚化,
+  // 因为代码默默退回了画原帧)。宁可边缘粗一点,也不能让这个功能看起来是坏的。
   if (!maskData || maskW === 0 || maskH === 0) {
+    if (landmarks.length > 0) {
+      drawBlurredFromLandmarks(ctx, video, landmarks, w, h)
+      return
+    }
     ctx.filter = 'none'
     ctx.drawImage(video, 0, 0, w, h)
     return
@@ -104,4 +114,53 @@ export function drawBlurred(
 
   // 4. 人叠回模糊背景上
   ctx.drawImage(sharp, 0, 0)
+}
+
+
+/**
+ * 兜底虚化:没有分割蒙版时,用关键点的包围盒围出一个圆角区域当作"人"。
+ * 比蒙版粗糙得多 —— 它只是一个胶囊形,不贴合轮廓 —— 但背景确实糊了,
+ * 而且办公室里要挡的就是背景里的人和白板,不需要像素级精度。
+ */
+function drawBlurredFromLandmarks(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  lms: Landmark[],
+  w: number,
+  h: number,
+): void {
+  const seen = lms.filter((p) => (p.visibility ?? 0) > 0.4)
+  if (seen.length < 4) {
+    ctx.filter = 'none'
+    ctx.drawImage(video, 0, 0, w, h)
+    return
+  }
+
+  // 🔴 这里**不翻** x。虚化画布挂的是 .cam,CSS 上已经有 scaleX(-1),
+  // 画进去的是原始帧,翻转由 CSS 统一做。再翻一次区域就跑到另一边了。
+  // (骨架画布挂的是 .overlay,没有 CSS 翻转,所以它才要在代码里翻)
+  const xs = seen.map((p) => p.x * w)
+  const ys = seen.map((p) => p.y * h)
+  const pad = w * 0.11
+  const x0 = Math.max(0, Math.min(...xs) - pad)
+  const x1 = Math.min(w, Math.max(...xs) + pad)
+  const y0 = Math.max(0, Math.min(...ys) - pad * 1.25)
+  const y1 = Math.min(h, Math.max(...ys) + pad)
+
+  ctx.filter = `blur(${BLUR_PX}px)`
+  ctx.drawImage(video, 0, 0, w, h)
+  ctx.filter = 'none'
+
+  ctx.save()
+  ctx.beginPath()
+  const r = Math.min((x1 - x0) / 2, (y1 - y0) / 2, 90)
+  ctx.moveTo(x0 + r, y0)
+  ctx.arcTo(x1, y0, x1, y1, r)
+  ctx.arcTo(x1, y1, x0, y1, r)
+  ctx.arcTo(x0, y1, x0, y0, r)
+  ctx.arcTo(x0, y0, x1, y0, r)
+  ctx.closePath()
+  ctx.clip()
+  ctx.drawImage(video, 0, 0, w, h)
+  ctx.restore()
 }

@@ -19,6 +19,34 @@ export interface CamOption {
   label: string
 }
 
+/**
+ * macOS 的接力相机会把一台 iPhone 拆成好几个设备,其中"桌上视角 / Desk View"
+ * 是俯拍桌面的,根本拍不到人。全都列出来的话用户面对四五个名字不知道选哪个。
+ * 这里滤掉拍不到人的,并把重复的 label 去掉。
+ */
+const UNUSABLE = /desk view|桌上視角|桌上视角|screen|display/i
+
+export function usableCameras(all: MediaDeviceInfo[]): CamOption[] {
+  const seen = new Set<string>()
+  const out: CamOption[] = []
+  all
+    .filter((d) => d.kind === 'videoinput')
+    .forEach((d, i) => {
+      const label = d.label || `Camera ${i + 1}`
+      if (UNUSABLE.test(label)) return
+      if (seen.has(label)) return
+      seen.add(label)
+      out.push({ deviceId: d.deviceId, label })
+    })
+  // 全被滤掉了说明规则太狠,退回原始列表 —— 宁可多几个,也不能一个都不给
+  if (out.length === 0) {
+    return all
+      .filter((d) => d.kind === 'videoinput')
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` }))
+  }
+  return out
+}
+
 interface UsePoseResult {
   videoRef: React.RefObject<HTMLVideoElement>
   status: PoseStatus
@@ -159,13 +187,9 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
       // 只有拿到权限之后 label 才非空,所以枚举放在这里
       try {
         const all = await navigator.mediaDevices.enumerateDevices()
-        setCameras(
-          all
-            .filter((d) => d.kind === 'videoinput')
-            .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
-        )
+        setCameras(usableCameras(all))
       } catch {
-        /* 枚举失败不影响already开着的那一路 */
+        /* 枚举失败不影响已经开着的那一路 */
       }
 
       setStatus('running')

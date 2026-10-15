@@ -63,7 +63,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     (f: FrameData) => {
       const cam = camCanvasRef.current
       const vid = videoRef.current
-      if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH)
+      if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
       draw(canvasRef.current, f.landmarks)
       if (!checker) return
       setOut(checker(f.landmarks, stateRef.current, performance.now(), f.world))

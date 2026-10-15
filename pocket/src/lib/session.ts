@@ -96,6 +96,18 @@ export function composeSession(input: SessionInput): Session {
     return a.costSeconds - b.costSeconds
   })
 
+  /**
+   * 去重键。
+   * 🔴 力量动作按 pattern 去重(别一节课三种深蹲),但 mobility 不能这么去重:
+   * 颈、腕、踝、眼睛都是 mobility,它们是不同的身体部位,不是同一件事。
+   * 所以 mobility 按**目标部位**去重 —— 两个颈部动作仍然只取一个,
+   * 但颈 + 腕 + 踝可以同时出现。
+   *
+   * 加了六个坐姿动作之后,旧规则反而让课变短了(全挤在四个 pattern 里,上限就是四个)。
+   */
+  const dedupeKey = (m: Movement) =>
+    m.pattern === 'mobility' ? `mobility:${m.loads.join(',')}` : m.pattern
+
   const items: SessionItem[] = []
   const usedPatterns = new Set<string>()
   const taken = new Set<string>()
@@ -103,7 +115,7 @@ export function composeSession(input: SessionInput): Session {
 
   const add = (m: Movement) => {
     items.push({ movement: m, reason: reasonFor(m, input) })
-    usedPatterns.add(m.pattern)
+    usedPatterns.add(dedupeKey(m))
     taken.add(m.id)
     spent += m.costSeconds
   }
@@ -111,7 +123,7 @@ export function composeSession(input: SessionInput): Session {
   // 第一趟:同一个动作模式最多一个,避免一节课全是深蹲
   for (const m of ordered) {
     if (items.length >= 6) break
-    if (usedPatterns.has(m.pattern)) continue
+    if (usedPatterns.has(dedupeKey(m))) continue
     if (spent + m.costSeconds > budget) continue
     add(m)
   }
