@@ -64,7 +64,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       const cam = camCanvasRef.current
       const vid = videoRef.current
       if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
-      draw(canvasRef.current, f.landmarks)
+      draw(canvasRef.current, f.landmarks, stateRef.current)
       if (!checker) return
       /**
        * 🔴 必须把新状态写回 ref。
@@ -233,8 +233,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   )
 }
 
-/** 画骨架。只画,不判断。 */
-function draw(canvas: HTMLCanvasElement | null, lms: Landmark[]) {
+/** 画骨架和目标圈。只画,不判断。 */
+function draw(canvas: HTMLCanvasElement | null, lms: Landmark[], state?: CheckState) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -262,5 +262,27 @@ function draw(canvas: HTMLCanvasElement | null, lms: Landmark[]) {
     ctx.beginPath()
     ctx.arc((1 - p.x) * w, p.y * h, 3.5, 0, Math.PI * 2)
     ctx.fill()
+  }
+
+  // 目标圈。和关键点用同一套镜像规则,否则圈和手对不上。
+  if (state?.targetX != null && state.targetY != null) {
+    const cx = (1 - state.targetX) * w
+    const cy = state.targetY * h
+    const r = 0.085 * w
+
+    // 手离得越近圈越实,给一点"快碰到了"的反馈
+    const wrists = [lms[LM.leftWrist], lms[LM.rightWrist]].filter((p) => (p?.visibility ?? 0) > 0.5)
+    const near = wrists.length
+      ? Math.min(...wrists.map((p) => Math.hypot((1 - p.x) * w - cx, p.y * h - cy)))
+      : Infinity
+    const close = Math.max(0, Math.min(1, 1 - (near - r) / (r * 2.5)))
+
+    ctx.lineWidth = 5
+    ctx.strokeStyle = `rgba(125, 220, 190, ${0.55 + close * 0.45})`
+    ctx.fillStyle = `rgba(125, 220, 190, ${0.12 + close * 0.3})`
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
   }
 }

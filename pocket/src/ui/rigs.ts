@@ -54,6 +54,11 @@ export interface Frames {
  * 符号约定:绕 X 轴负值把肢体向前摆(镜头在 +Z),正值向后。
  */
 export const RIGS: Record<string, Frames> = {
+  'reach-dots': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderZ: 0.4 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderZ: 2.0, shoulderX: -0.5 },
+    labelA: 'Hands down', labelB: 'Reach out',
+  },
   'shoulder-shrug': {
     a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5 },
     b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderY: -0.1 },

@@ -12,6 +12,7 @@ export type Place = 'desk' | 'floor' | 'gym'
 export type BodyArea = 'neck' | 'shoulder' | 'back' | 'hip' | 'knee' | 'ankle' | 'wrist'
 export type Pattern = 'squat' | 'hinge' | 'push' | 'pull' | 'mobility' | 'carry'
 export type PoseCheckId =
+  | 'reach-target'
   | 'squat-depth'
   | 'hinge-back'
   | 'shoulder-range'
@@ -366,6 +367,24 @@ export const MOVEMENTS: Movement[] = [
     reps: 12,
     costSeconds: 55,
     stopIf: 'Stop if the shoulder pinches as you pass halfway.',
+  },
+  {
+    id: 'reach-dots',
+    name: 'Reach the circles',
+    cues: ['Touch it with either hand', 'Reach, do not lean'],
+    pattern: 'mobility',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    // 肩 + 上背:去重键要和 Shoulder openers(只有 shoulder)区分开,
+    // 否则两个同属 mobility:shoulder,这个最可靠的判定器反而排不进课表
+    loads: ['shoulder', 'back'],
+    visibility: 'discreet',
+    poseCheck: 'reach-target',
+    reps: 12,
+    costSeconds: 52,
+    stopIf: 'Stop if your shoulder pinches as you reach high.',
   },
 ]
 

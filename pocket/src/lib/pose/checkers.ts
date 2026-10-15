@@ -37,6 +37,14 @@ export interface CheckState {
   baseline: number | null
   /** 已采样的基线帧数 */
   baseSamples: number
+  /**
+   * 当前目标圈的位置(关键点坐标系,0..1)。null = 这个判定器不用目标圈。
+   * 🔴 "碰圆圈"这种判法比角度阈值可靠得多:只需要腕关节一个点,
+   * 全在屏幕坐标里算,不挑机位,而且用户看得见它在工作 ——
+   * 角度判定失败时用户只看到数字不动,不知道是没做到位还是坏了。
+   */
+  targetX: number | null
+  targetY: number | null
 }
 
 export interface CheckOutput extends CheckState {
@@ -53,6 +61,7 @@ export function initState(): CheckState {
   return {
     reps: 0, phase: 'up', minAngle: 180, downStartT: 0, lastRepMs: 0, flags: [],
     baseline: null, baseSamples: 0,
+    targetX: null, targetY: null,
   }
 }
 
@@ -362,6 +371,7 @@ export function checkTwist(
 }
 
 export type CheckerId =
+  | 'reach-target'
   | 'squat-depth'
   | 'hinge-back'
   | 'shoulder-range'
@@ -456,7 +466,84 @@ export function checkArmRaise(
   return { ...s, confident: true, cue, angle: Math.round(angle), counted }
 }
 
+
+/* ------------------------------------------------------ 碰圆圈 */
+
+/**
+ * 候选目标位置(关键点坐标系,0..1,未镜像)。
+ * 散在躯干四周,够得着但必须伸手 —— 原地不动碰不到任何一个。
+ */
+const TARGETS: Array<[number, number]> = [
+  [0.20, 0.30], [0.80, 0.30],
+  [0.13, 0.52], [0.87, 0.52],
+  [0.30, 0.15], [0.70, 0.15],
+  [0.50, 0.12],
+]
+
+/** 碰到的判定半径。太小碰不着,太大站着不动就算碰到了。 */
+const HIT_RADIUS = 0.085
+
+const REACH_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftWrist, LM.rightWrist]
+
+/** 离两只手腕都最远的那个候选 —— 保证下一个目标一定要动起来才够得到。 */
+function farthestTarget(lw: Landmark, rw: Landmark): [number, number] {
+  let best = TARGETS[0]
+  let bestD = -1
+  for (const [x, y] of TARGETS) {
+    const d = Math.min(Math.hypot(x - lw.x, y - lw.y), Math.hypot(x - rw.x, y - rw.y))
+    if (d > bestD) {
+      bestD = d
+      best = [x, y]
+    }
+  }
+  return best
+}
+
+/**
+ * 碰圆圈:屏幕上出一个圈,手腕碰到就算一次,然后换个位置。
+ *
+ * 为什么可靠:
+ * - 只用腕关节,是 MediaPipe 最稳的几个点之一
+ * - 全在画面坐标里算,不需要三维、不需要基线、不挑机位
+ * - 用户看得见圈,碰到就消失 —— 不存在"不知道它有没有在工作"
+ */
+export function checkReach(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+  if (!visibleEnough(lms, REACH_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, REACH_IDX) }
+  }
+  const lw = lms[LM.leftWrist]
+  const rw = lms[LM.rightWrist]
+  const s = { ...state }
+
+  if (s.targetX == null || s.targetY == null) {
+    const [x, y] = farthestTarget(lw, rw)
+    s.targetX = x
+    s.targetY = y
+    s.downStartT = t
+    return { ...s, confident: true, cue: 'Touch the circle with either hand.', angle: null, counted: false }
+  }
+
+  const dl = Math.hypot(lw.x - s.targetX, lw.y - s.targetY)
+  const dr = Math.hypot(rw.x - s.targetX, rw.y - s.targetY)
+  const nearest = Math.min(dl, dr)
+
+  if (nearest <= HIT_RADIUS) {
+    s.reps += 1
+    s.lastRepMs = s.downStartT > 0 ? t - s.downStartT : 0
+    const [x, y] = farthestTarget(lw, rw)
+    s.targetX = x
+    s.targetY = y
+    s.downStartT = t
+    return { ...s, confident: true, cue: null, angle: null, counted: true }
+  }
+
+  // 距离换算成百分比给读数用:100 = 碰到了
+  const pct = Math.round(Math.max(0, 1 - (nearest - HIT_RADIUS) / 0.5) * 100)
+  return { ...s, confident: true, cue: null, angle: pct, counted: false }
+}
+
 export const CHECK_SETUP: Record<CheckerId, string> = {
+  'reach-target': 'Sit or stand so your head and both hands are in the picture. Any angle is fine.',
   'squat-depth':
     'Stand side-on to the camera, far enough back that your feet are in the picture.',
   'hinge-back':
@@ -471,6 +558,7 @@ export const CHECK_SETUP: Record<CheckerId, string> = {
 }
 
 export const CHECKERS: Record<CheckerId, PoseChecker> = {
+  'reach-target': checkReach,
   'squat-depth': checkSquat,
   'hinge-back': checkHinge,
   'shoulder-range': checkShoulder,
