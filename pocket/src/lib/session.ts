@@ -234,3 +234,23 @@ function headlineFor(input: SessionInput, count: number): string {
   if (input.energy === 'low') return `${plural(count, 'easy movement')} ${where}. Nothing hard today.`
   return `${plural(count, 'movement')} ${where}, about ${input.minutes} minutes.`
 }
+
+
+/**
+ * 当前设置下,一节课最长能排到多少分钟。
+ *
+ * 🔴 用来定时长滑块的上限。
+ * 原来固定给到二十分钟,但有人在场时动作库只排得出十分钟 ——
+ * 于是滑块允许你选二十,再回过头告诉你"剩十分钟没用上"。
+ * 承诺一个给不出来的数字,然后为它道歉,不如一开始就只给能给的。
+ *
+ * 这个上限会随"周围有没有人""在哪做""哪里酸"变 —— 那正是它该传达的信息:
+ * 换个设置,你能做的就更多。
+ */
+export function maxSessionMinutes(
+  input: Omit<SessionInput, 'minutes' | 'maxItems'>,
+  ceiling = 30,
+): number {
+  const full = composeSession({ ...input, minutes: ceiling })
+  return Math.max(1, full.estimatedMinutes)
+}

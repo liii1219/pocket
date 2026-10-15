@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea, Place } from './lib/movements'
-import { composeSession, type Energy } from './lib/session'
+import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 import { PhoneQR } from './ui/PhoneQR'
 
@@ -27,8 +27,7 @@ const AREAS: BodyArea[] = ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', '
  * 不做成固定几档:固定档位配上"数量"之后会出现四个档位显示同一个数字的情况,
  * 时长选项就失去意义了。
  */
-const MAX_MIN = 20
-const MAX_ITEMS = 10
+const MAX_ITEMS = 12
 
 const THEME_KEY = 'pocket.theme.v1'
 type Theme = 'light' | 'dark'
@@ -74,6 +73,17 @@ export default function App() {
   /** null = 让系统按时长定 */
   const [count, setCount] = useState<number | null>(null)
   const [theme, toggleTheme] = useTheme()
+
+  /** 当前设置下排得满的最长时间。滑块上限就是它,不承诺给不出来的长度。 */
+  const maxMin = useMemo(
+    () => maxSessionMinutes({ place, sore, energy, quietOnly: place !== 'gym', alone }),
+    [place, sore, energy, alone],
+  )
+
+  // 换设置之后上限可能变小,把已选的时间收回来
+  useEffect(() => {
+    setMinutes((m) => Math.min(m, maxMin))
+  }, [maxMin])
 
   const session = useMemo(
     () =>
@@ -182,12 +192,17 @@ export default function App() {
           <input
             type="range"
             min={1}
-            max={MAX_MIN}
-            value={minutes}
+            max={maxMin}
+            value={Math.min(minutes, maxMin)}
             onChange={(e) => setMinutes(Number(e.target.value))}
           />
-          <output>{minutes} min</output>
+          <output>{Math.min(minutes, maxMin)} min</output>
         </div>
+        <p className="alone-hint">
+          {alone
+            ? `${maxMin} minutes is as long as a session gets.`
+            : `${maxMin} minutes is as long as a quiet session gets. "Just me" goes longer.`}
+        </p>
       </label>
 
       <div className="field">

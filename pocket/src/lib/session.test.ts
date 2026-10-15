@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeSession, type SessionInput } from './session'
+import { composeSession, maxSessionMinutes, type SessionInput } from './session'
 
 const base: SessionInput = { minutes: 15, place: 'desk', sore: [], energy: 'ok', quietOnly: true, alone: true }
 
@@ -259,5 +259,39 @@ describe('composeSession', () => {
     const few = composeSession({ ...base, minutes: 20, alone: false })
     const many = composeSession({ ...base, minutes: 20, alone: true })
     expect(many.items.length).toBeGreaterThan(few.items.length)
+  })
+
+  /* --- 时长上限要和实际排得出来的长度一致 ----------------------------- */
+
+  it('上限内选满时,剩下的时间不超过一个动作的长度', () => {
+    // 回归:滑块固定给到二十分钟,但有人在场只排得出十分钟,
+    // 于是允许你选二十、再回头道歉说"剩十分钟"。承诺给不出来的数字不如不承诺。
+    for (const alone of [true, false]) {
+      const ctx = { place: 'desk' as const, sore: [], energy: 'ok' as const, quietOnly: true, alone }
+      const max = maxSessionMinutes(ctx)
+      const s = composeSession({ ...ctx, minutes: max })
+      expect(max - s.estimatedMinutes).toBeLessThanOrEqual(2)
+    }
+  })
+
+  it('一个人时上限更长 —— 这正是这个数字该传达的信息', () => {
+    const ctx = { place: 'desk' as const, sore: [], energy: 'ok' as const, quietOnly: true }
+    expect(maxSessionMinutes({ ...ctx, alone: true }))
+      .toBeGreaterThan(maxSessionMinutes({ ...ctx, alone: false }))
+  })
+
+  it('标了很多酸痛时上限会缩短', () => {
+    const ctx = { place: 'desk' as const, energy: 'ok' as const, quietOnly: true, alone: true }
+    const healthy = maxSessionMinutes({ ...ctx, sore: [] })
+    const achy = maxSessionMinutes({ ...ctx, sore: ['shoulder', 'back', 'hip', 'knee'] })
+    expect(achy).toBeLessThan(healthy)
+  })
+
+  it('上限至少是 1,不会给出 0 分钟', () => {
+    const ctx = {
+      place: 'desk' as const, energy: 'ok' as const, quietOnly: true, alone: false,
+      sore: ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', 'wrist'] as const,
+    }
+    expect(maxSessionMinutes({ ...ctx, sore: [...ctx.sore] })).toBeGreaterThanOrEqual(1)
   })
 })
