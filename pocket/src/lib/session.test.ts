@@ -294,4 +294,48 @@ describe('composeSession', () => {
     }
     expect(maxSessionMinutes({ ...ctx, sore: [...ctx.sore] })).toBeGreaterThanOrEqual(1)
   })
+
+  /* --- 全链路走查发现的三个问题 ------------------------------------- */
+
+  it('"多给时间能解决"才报 time,否则报 pool', () => {
+    // 回归:安静模式要十一个、不重复的只有十个,却报"十分钟里只放得下十个",
+    // 让人去加时间 —— 加了也没用,卡住的是去重规则。
+    const quiet = { ...base, place: 'desk' as const, alone: false }
+    const max = maxSessionMinutes(quiet)
+    const s = composeSession({ ...quiet, minutes: max, maxItems: 30 })
+    expect(s.shortfall).toBe('pool')
+
+    // 时间真的不够时仍然报 time
+    const squeezed = composeSession({ ...quiet, minutes: 3, maxItems: 6 })
+    expect(squeezed.shortfall).toBe('time')
+  })
+
+  it('低精力时每个动作的理由不能全一样', () => {
+    const s = composeSession({ ...base, minutes: 10, energy: 'low' })
+    expect(s.items.length).toBeGreaterThan(3)
+    expect(new Set(s.items.map((i) => i.reason)).size).toBeGreaterThan(1)
+  })
+
+  it('低精力只给活动度,但说法随动作变', () => {
+    const s = composeSession({ ...base, minutes: 10, energy: 'low' })
+    const timed = s.items.filter((i) => i.movement.seconds != null)
+    const repped = s.items.filter((i) => i.movement.reps != null)
+    if (timed.length && repped.length) {
+      expect(timed[0].reason).not.toBe(repped[0].reason)
+    }
+  })
+
+  it('滑块上限回灌进去必须装得下整节课', () => {
+    // 回归:上限用取整后的分钟算,耗时 550 秒报 10 分钟,
+    // 但 10 分钟的预算只有 540 秒 —— 拉到头仍然少一个动作。
+    for (const alone of [true, false]) {
+      for (const energy of ['low', 'ok', 'good'] as const) {
+        const ctx = { place: 'desk' as const, sore: [], energy, quietOnly: true, alone }
+        const max = maxSessionMinutes(ctx)
+        const atMax = composeSession({ ...ctx, minutes: max })
+        const uncapped = composeSession({ ...ctx, minutes: 60 })
+        expect(atMax.items.length).toBe(uncapped.items.length)
+      }
+    }
+  })
 })

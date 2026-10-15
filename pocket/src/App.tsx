@@ -80,18 +80,20 @@ export default function App() {
     [place, sore, energy, alone],
   )
 
-  // 换设置之后上限可能变小,把已选的时间收回来
-  useEffect(() => {
-    setMinutes((m) => Math.min(m, maxMin))
-  }, [maxMin])
+  /**
+   * 🔴 不改写用户选的时长,只在用的时候取 min。
+   * 原来换设置时直接 setMinutes 压下去:在课表屏把精力切到 Low,
+   * 十分钟被悄悄压成六分钟,切回来也不恢复 —— 用户选的东西被改了,还没人告诉他。
+   */
+  const effMinutes = Math.min(minutes, maxMin)
 
   const session = useMemo(
     () =>
       composeSession({
-        minutes, place, sore, energy, quietOnly: place !== 'gym', alone,
+        minutes: effMinutes, place, sore, energy, quietOnly: place !== 'gym', alone,
         maxItems: count ?? undefined,
       }),
-    [minutes, place, sore, energy, alone, count],
+    [effMinutes, place, sore, energy, alone, count],
   )
 
   /* ------------------------------------------------------------ screens */
@@ -193,10 +195,10 @@ export default function App() {
             type="range"
             min={1}
             max={maxMin}
-            value={Math.min(minutes, maxMin)}
+            value={effMinutes}
             onChange={(e) => setMinutes(Number(e.target.value))}
           />
-          <output>{Math.min(minutes, maxMin)} min</output>
+          <output>{effMinutes} min</output>
         </div>
         <p className="alone-hint">
           {alone
@@ -262,9 +264,9 @@ export default function App() {
             {session.estimatedMinutes} min
           </p>
           {/* 剩的时间多到说得出口就说,别让人自己去减 */}
-          {minutes - session.estimatedMinutes >= 3 && (
+          {effMinutes - session.estimatedMinutes >= 3 && (
             <p className="summary warn">
-              That leaves {minutes - session.estimatedMinutes} minutes spare.{' '}
+              That leaves {effMinutes - session.estimatedMinutes} minutes spare.{' '}
               {session.poolExhausted
                 ? alone
                   ? 'There is nothing else in the library that fits.'
@@ -274,7 +276,7 @@ export default function App() {
           )}
           {session.shortfall === 'time' && (
             <p className="summary warn">
-              You asked for {session.wanted}. Only {session.items.length} fit in {minutes} minutes.
+              You asked for {session.wanted}. Only {session.items.length} fit in {effMinutes} minutes.
             </p>
           )}
           {session.shortfall === 'pool' && (

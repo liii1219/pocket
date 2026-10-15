@@ -56,6 +56,8 @@ export interface Session {
   poolExhausted: boolean
   /** 预计耗时(分钟,向上取整) */
   estimatedMinutes: number
+  /** 预计耗时(秒,未取整)。算"要多少分钟才装得下"时必须用它,不能用取整后的分钟 */
+  spentSeconds: number
   /** 整节课的一句话说明,显示在最上面 */
   headline: string
 }
@@ -77,7 +79,13 @@ function reasonFor(m: Movement, input: SessionInput): string {
     return `Gentle movement for the ${targeted.join(' and ')} you marked sore. It does not load it.`
   }
   if (input.energy === 'low' && m.pattern === 'mobility') {
-    return 'You said your energy is low, so this is mobility rather than effort.'
+    /**
+     * 低精力时整节课都是 mobility,这句话对每一个都成立 —— 于是六张卡片
+     * 显示同一句,等于没解释。按动作自己的性质分一下。
+     */
+    return m.seconds
+      ? 'A hold, not a set. Nothing to push against on a low day.'
+      : 'Slow and small. It asks for movement, not effort.'
   }
   if (m.poseCheck) {
     return 'The camera can check this one, so you get feedback on the shape.'
@@ -201,7 +209,19 @@ export function composeSession(input: SessionInput): Session {
   const asked = input.maxItems
   let shortfall: Shortfall = 'none'
   if (asked != null && items.length < asked) {
-    shortfall = asked > ordered.length ? 'pool' : 'time'
+    /**
+     * 🔴 只有"多给时间真的能多排一个"才算时间不够。
+     * 判据是:有没有哪个还没用的动作,它的去重键也还没被占。
+     * 有 → 纯粹是时间塞不下,多给时间就能加进来。
+     * 没有 → 卡住的是"同部位只取一个",再多时间也加不了,是动作库的问题。
+     *
+     * 原来拿"要的数量 vs 动作总数"比,结果安静模式下要十一个、
+     * 不重复的只有十个,却报成"十分钟里只放得下十个" —— 让人去加时间,加了也没用。
+     */
+    const moreTimeWouldHelp = ordered.some(
+      (m) => !taken.has(m.id) && !usedPatterns.has(dedupeKey(m)),
+    )
+    shortfall = moreTimeWouldHelp ? 'time' : 'pool'
   }
 
   const remaining = budget - spent
@@ -215,6 +235,7 @@ export function composeSession(input: SessionInput): Session {
     poolExhausted: !canAddMore,
     wanted: asked ?? items.length,
     estimatedMinutes: Math.ceil(spent / 60),
+    spentSeconds: spent,
     headline: headlineFor(input, items.length),
   }
 }
@@ -252,5 +273,13 @@ export function maxSessionMinutes(
   ceiling = 30,
 ): number {
   const full = composeSession({ ...input, minutes: ceiling })
-  return Math.max(1, full.estimatedMinutes)
+  /**
+   * 🔴 要回答的是"多少分钟才装得下这一整节课",不是"这节课有多长"。
+   * 预算是 minutes×60 − BUFFER,所以 minutes 必须 ≥ (耗时 + BUFFER) / 60。
+   *
+   * 用取整后的分钟会差一个动作:耗时 550 秒报 10 分钟,
+   * 但 10 分钟的预算只有 540 秒 —— 把这个数回灌进去,最后一个动作就被挤掉了,
+   * 于是滑块拉到头仍然说"还差一个"。
+   */
+  return Math.max(1, Math.ceil((full.spentSeconds + BUFFER_SECONDS) / 60))
 }
