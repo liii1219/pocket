@@ -13,6 +13,8 @@
 
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PointMap, POINT_MAPS } from './PointMap'
+import { TargetPreview } from './TargetPreview'
+import { targetSpots } from '../lib/pose/checkers'
 import { RIGS } from './rigs'
 
 /** three.js 有 600KB,只有进到教练屏才需要,所以拆出去按需加载。 */
@@ -132,12 +134,14 @@ function Figure({ pose, dim = false }: { pose: Pose; dim?: boolean }) {
   )
 }
 
-export function MovementDiagram({ movementId }: { movementId: string }) {
+export function MovementDiagram({ movementId, checkId }: { movementId: string; checkId?: string }) {
   const pointKind = POINT_MAPS[movementId]
   const f = FRAMES[movementId]
   const reduced =
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
   const t = useCycle(!reduced && !!f)
+  // 碰目标类动作没有固定姿势,该画的是"圈会出现在哪"
+  if (checkId && targetSpots(checkId).length > 0) return <TargetPreview checkId={checkId} />
   // 按压类动作的要点是"手指按在哪",不是身体摆成什么姿势,所以画定位图
   if (pointKind) return <PointMap kind={pointKind} />
   // 有三维姿势就用三维;没有的退回二维两帧,不留空

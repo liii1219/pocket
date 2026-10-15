@@ -608,6 +608,17 @@ export function targetRadius(id: string): number {
   return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.radius ?? 0.085
 }
 
+/** 这个玩法的圈会出现在哪些位置。示意图用:用户需要知道的是"圈在哪",不是"摆什么姿势"。 */
+export function targetSpots(id: string): Array<[number, number]> {
+  const spec = (TARGET_SPECS as Record<string, TargetSpec>)[id]
+  return spec ? spec.spots.map(([x, y]) => [x, y] as [number, number]) : []
+}
+
+/** 用手还是用头去碰。 */
+export function targetTrack(id: string): 'wrists' | 'head' | null {
+  return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.track ?? null
+}
+
 export const CHECK_UNIT: Record<CheckerId, string> = {
   'reach-target': '% to the circle',
   'reach-high': '% to the circle',

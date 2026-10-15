@@ -145,7 +145,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     return (
       <div className="coach">
         {head}
-        <MovementDiagram movementId={movement.id} />
+        <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />
         <p className="no-check">
           Follow the two cues. There is no camera check for this one, so nothing is watching.
         </p>
@@ -163,7 +163,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     <div className="coach">
       {head}
 
-      {status !== 'running' && <MovementDiagram movementId={movement.id} />}
+      {status !== 'running' && <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />}
 
       <div className="stage">
         <video ref={videoRef} playsInline muted className="cam" style={{ opacity: blur ? 0 : 1 }} />

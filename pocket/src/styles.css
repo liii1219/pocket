@@ -245,3 +245,11 @@ button:active { transform: scale(.985); }
 .phoneqr-title { margin: 2px 0 4px; font-weight: 650; font-size: 15px; }
 .phoneqr-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .readout-meta .warn { color: var(--warn); font-weight: 650; }
+
+/* ---------- 碰目标玩法的示意图 ---------- */
+.targetpreview {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow);
+}
+.targetpreview svg { width: 100%; max-width: 300px; display: block; margin: 0 auto; }
+.targetpreview-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; line-height: 1.5; }
