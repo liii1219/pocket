@@ -502,6 +502,12 @@ interface TargetSpec {
     /** 碰到了但姿势不对时说什么 */
     cue: string
   }
+  /**
+   * 必须用对侧的手。
+   * 🔴 转体用同侧手够只是把胳膊往外伸,身体可以一动不动。
+   * 规定"圈在右边就用左手",够不到就只能转身 —— 动作本身变成了唯一的解法。
+   */
+  crossBody?: boolean
 }
 
 const TARGET_SPECS = {
@@ -548,6 +554,7 @@ const TARGET_SPECS = {
       [0.10, 0.22], [0.90, 0.22],
       [0.06, 0.55], [0.94, 0.55],
     ],
+    crossBody: true,
     gate: {
       test: (_lms, world) => {
         if (!world) return true
@@ -577,6 +584,19 @@ const HEAD_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
 function touchPoints(lms: Landmark[], track: TargetSpec['track']): Landmark[] {
   if (track === 'head') return [mid(lms[LM.leftEar], lms[LM.rightEar])]
   return [lms[LM.leftWrist], lms[LM.rightWrist]]
+}
+
+/**
+ * 交叉模式下,这个目标该用哪只手。
+ *
+ * 坐标系说明:MediaPipe 的 left/right 指**人自己的**左右。人正对镜头时,
+ * 他的左手出现在画面右半边(x 大)。所以圈在画面左半边(x < 0.5)要用左手够过去,
+ * 反之用右手 —— 两种情况都必须横过身体。
+ */
+function crossHand(lms: Landmark[], targetX: number): { point: Landmark; name: string } {
+  return targetX < 0.5
+    ? { point: lms[LM.leftWrist], name: 'left' }
+    : { point: lms[LM.rightWrist], name: 'right' }
 }
 
 /** 离所有触点都最远的候选 —— 保证下一个目标一定要动起来才够得到。 */
@@ -610,11 +630,31 @@ function makeTargetChecker(id: TargetCheckId): PoseChecker {
       s.targetX = x
       s.targetY = y
       s.downStartT = t
-      const how = spec.track === 'head' ? 'your head' : 'either hand'
+      const how = spec.track === 'head'
+        ? 'your head'
+        : spec.crossBody
+          ? 'the hand on the far side, reaching across'
+          : 'either hand'
       return { ...s, confident: true, cue: `Touch the circle with ${how}.`, angle: null, counted: false }
     }
 
-    const nearest = Math.min(...pts.map((p) => Math.hypot(p.x - s.targetX!, p.y - s.targetY!)))
+    // 交叉模式只认对侧那只手;另一只手碰到不算,而且要说清楚
+    const cross = spec.crossBody ? crossHand(lms, s.targetX) : null
+    const scoring = cross ? [cross.point] : pts
+    const nearest = Math.min(...scoring.map((p) => Math.hypot(p.x - s.targetX!, p.y - s.targetY!)))
+
+    if (cross && nearest > spec.radius) {
+      const other = pts.find((p) => p !== cross.point)
+      if (other && Math.hypot(other.x - s.targetX, other.y - s.targetY) <= spec.radius) {
+        return {
+          ...s,
+          confident: true,
+          cue: `Use your ${cross.name} hand and reach across your body.`,
+          angle: null,
+          counted: false,
+        }
+      }
+    }
 
     if (nearest <= spec.radius) {
       // 碰到了,但姿势条件不满足 —— 不计数,给一条具体的纠正
@@ -656,6 +696,11 @@ export function targetGateCue(id: string): string | null {
   return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.gate?.cue ?? null
 }
 
+/** 这个玩法要不要用对侧的手。 */
+export function targetIsCrossBody(id: string): boolean {
+  return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.crossBody === true
+}
+
 /** 用手还是用头去碰。 */
 export function targetTrack(id: string): 'wrists' | 'head' | null {
   return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.track ?? null
@@ -679,7 +724,8 @@ export const CHECK_UNIT: Record<CheckerId, string> = {
 export const CHECK_SETUP: Record<CheckerId, string> = {
   'reach-target': 'Sit or stand so your head and both hands are in the picture. Any angle is fine.',
   'reach-high': 'Leave room above your head in the picture. Any angle is fine.',
-  'reach-cross': 'Sit or stand with your head and both hands in the picture. Any angle is fine.',
+  'reach-cross':
+    'Sit square to the camera with both hands in the picture. The circle on your right is for your left hand, and the other way round.',
   'head-target': 'Head and shoulders in the picture. You touch these with your head, not your hands.',
   'squat-depth':
     'Stand side-on to the camera, far enough back that your feet are in the picture.',

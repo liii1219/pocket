@@ -239,3 +239,52 @@ d4('姿势条件', () => {
     e4(targetGateCue('reach-cross')).not.toBeNull()
   })
 })
+
+/* 交叉手:转体必须用对侧的手 */
+import { describe as d5, it as i5, expect as e5 } from 'vitest'
+import { targetIsCrossBody } from './checkers'
+
+/** 把指定那只手放到坐标 (x,y),另一只手留在身侧,并带足够的转体。 */
+function handAt(which: 'left' | 'right', x: number, y: number): Landmark[] {
+  const lms = reachPose({ elbow: 170, twist: 35 })
+  const put = (i: number, px: number, py: number) =>
+    (lms[i] = { x: px, y: py, z: 0, visibility: 0.95 })
+  if (which === 'left') { put(LM.leftWrist, x, y); put(LM.rightWrist, 0.6, 0.8) }
+  else { put(LM.rightWrist, x, y); put(LM.leftWrist, 0.4, 0.8) }
+  return lms
+}
+
+d5('交叉手', () => {
+  i5('只有转体要求交叉,其他玩法不要求', () => {
+    e5(targetIsCrossBody('reach-cross')).toBe(true)
+    e5(targetIsCrossBody('reach-target')).toBe(false)
+    e5(targetIsCrossBody('reach-high')).toBe(false)
+  })
+
+  i5('同侧手碰到不算,并指名该用哪只手', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    // 圈在画面左半(x<0.5) → 该用左手;这里故意用右手
+    const tx = s.targetX! < 0.5 ? s.targetX! : 1 - s.targetX!
+    s = { ...s, targetX: tx }
+    const wrong = handAt('right', tx, s.targetY!)
+    const out = checkReachCross(wrong, s, 1000, wrong)
+    e5(out.reps).toBe(0)
+    e5(out.cue).toMatch(/left hand/)
+  })
+
+  i5('对侧手碰到就算', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    const tx = s.targetX! < 0.5 ? s.targetX! : 1 - s.targetX!
+    s = { ...s, targetX: tx }
+    const right = handAt('left', tx, s.targetY!)
+    e5(checkReachCross(right, s, 1000, right).reps).toBe(1)
+  })
+
+  i5('圈在另一边时要求的手也跟着换', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    const tx = s.targetX! > 0.5 ? s.targetX! : 1 - s.targetX!
+    s = { ...s, targetX: tx }
+    const correct = handAt('right', tx, s.targetY!)
+    e5(checkReachCross(correct, s, 1000, correct).reps).toBe(1)
+  })
+})

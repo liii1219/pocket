@@ -9,7 +9,7 @@
  * 头顶 / 身体两侧远端 / 耳朵旁边。所以这里直接把候选位置画出来。
  */
 
-import { targetGateCue, targetSpots, targetTrack } from '../lib/pose/checkers'
+import { targetGateCue, targetIsCrossBody, targetSpots, targetTrack } from '../lib/pose/checkers'
 
 /** 画面比例和摄像头一致(4:3),这样预览里的位置和实际位置对得上。 */
 const W = 100
@@ -19,6 +19,7 @@ export function TargetPreview({ checkId }: { checkId: string }) {
   const spots = targetSpots(checkId)
   const track = targetTrack(checkId)
   const gate = targetGateCue(checkId)
+  const cross = targetIsCrossBody(checkId)
   if (spots.length === 0 || !track) return null
 
   const useHead = track === 'head'
@@ -54,6 +55,14 @@ export function TargetPreview({ checkId }: { checkId: string }) {
         {/* 碰的那个点:手或头 */}
         {useHead ? (
           <circle cx={50} cy={30} r={3} fill="var(--accent)" />
+        ) : cross ? (
+          // 一条横过身体的手臂,说明"用远的那只手"
+          <>
+            <path d="M50 41 L18 38" stroke="var(--accent)" strokeWidth={2}
+                  strokeLinecap="round" fill="none" strokeDasharray="3 3" />
+            <circle cx={18} cy={38} r={3} fill="var(--accent)" />
+            <circle cx={60} cy={50} r={2.5} fill="var(--muted)" opacity={0.5} />
+          </>
         ) : (
           <>
             <circle cx={40} cy={50} r={3} fill="var(--accent)" />
@@ -62,8 +71,13 @@ export function TargetPreview({ checkId }: { checkId: string }) {
         )}
       </svg>
       <p className="targetpreview-note">
-        Circles appear here, one at a time. Touch each one with{' '}
-        {useHead ? 'your head' : 'either hand'} and the next one moves somewhere else.
+        Circles appear here, one at a time.{' '}
+        {useHead
+          ? 'Touch each one with your head'
+          : cross
+            ? 'Touch each one with the hand on the far side, reaching across your body'
+            : 'Touch each one with either hand'}{' '}
+        and the next one moves somewhere else.
       </p>
       {/* 有姿势条件的话必须先说 —— 否则这几个动作看起来是同一个游戏 */}
       {gate && <p className="targetpreview-gate">{gate}</p>}

@@ -221,7 +221,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'seated-twist',
     name: 'Seated twist',
-    cues: ['Sit tall first', 'Turn from the ribs'],
+    cues: ['Reach across your body', 'Turn from the ribs'],
     pattern: 'mobility',
     places: ['desk', 'floor', 'gym'],
     noise: 'quiet',
