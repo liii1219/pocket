@@ -10,7 +10,7 @@
  * 意味着"先导入",这条路走不通。现在只问用户自己就知道的那件事:现在有多少分钟。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea, Place } from './lib/movements'
 import { composeSession, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
@@ -22,6 +22,33 @@ const AREAS: BodyArea[] = ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', '
 /** 受访者说工作日五到十分钟才现实,更长的被描述为不现实。所以只有这两个。 */
 const CHOICES = [5, 10] as const
 
+const THEME_KEY = 'pocket.theme.v1'
+type Theme = 'light' | 'dark'
+
+/**
+ * 主题。默认浅色,见 styles.css 顶部的理由。选择存本地,刷新不变。
+ */
+function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY)
+      if (saved === 'light' || saved === 'dark') return saved
+    } catch {
+      /* 隐私模式下读不到,用默认值 */
+    }
+    return 'light'
+  })
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      localStorage.setItem(THEME_KEY, theme)
+    } catch {
+      /* 写不进去不影响使用 */
+    }
+  }, [theme])
+  return [theme, () => setTheme((v) => (v === 'light' ? 'dark' : 'light'))]
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('time')
   const [minutes, setMinutes] = useState(10)
@@ -29,10 +56,18 @@ export default function App() {
   const [energy, setEnergy] = useState<Energy>('ok')
   const [sore, setSore] = useState<BodyArea[]>([])
   const [itemIndex, setItemIndex] = useState(0)
+  /**
+   * 🔴 默认"周围有人"。两种猜错的代价不对等:
+   * 猜成"没人"而实际有人 → 课表里出现深蹲,用户直接关掉(测试里观察到的)。
+   * 猜成"有人"而实际没人 → 给了一节安静的课,点一下就能换回完整版。
+   * 后一种便宜得多。
+   */
+  const [alone, setAlone] = useState(false)
+  const [theme, toggleTheme] = useTheme()
 
   const session = useMemo(
-    () => composeSession({ minutes, place, sore, energy, quietOnly: place !== 'gym' }),
-    [minutes, place, sore, energy],
+    () => composeSession({ minutes, place, sore, energy, quietOnly: place !== 'gym', alone }),
+    [minutes, place, sore, energy, alone],
   )
 
   /* ------------------------------------------------------------ screens */
@@ -120,13 +155,18 @@ export default function App() {
 
   return (
     <main className="wrap">
-      <h1>Pocket</h1>
+      <div className="topbar">
+        <h1>Pocket</h1>
+        <button className="theme-toggle" onClick={toggleTheme}>
+          {theme === 'light' ? 'Dark' : 'Light'}
+        </button>
+      </div>
       <p className="muted">How long have you got right now?</p>
 
       <ul className="gaps">
         {CHOICES.map((m) => {
           const count = composeSession({
-            minutes: m, place, sore, energy, quietOnly: place !== 'gym',
+            minutes: m, place, sore, energy, quietOnly: place !== 'gym', alone,
           }).items.length
           return (
             <li key={m}>
@@ -139,6 +179,23 @@ export default function App() {
           )
         })}
       </ul>
+
+      <div className="alone">
+        <p className="label">Anyone around?</p>
+        <div className="chips">
+          <button className={!alone ? 'chip on' : 'chip'} onClick={() => setAlone(false)}>
+            People nearby
+          </button>
+          <button className={alone ? 'chip on' : 'chip'} onClick={() => setAlone(true)}>
+            Just me
+          </button>
+        </div>
+        <p className="alone-hint">
+          {alone
+            ? 'You get the full session.'
+            : 'You only get movements that look like stretching at a desk.'}
+        </p>
+      </div>
 
       <p className="fineprint">
         Nothing to set up and nothing to install. Do it in the clothes you are wearing.

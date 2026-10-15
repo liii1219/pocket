@@ -7,13 +7,14 @@
  * - 系统不确定时直接说"看不清",不猜。
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Movement } from '../lib/movements'
 import { CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
 import type { Landmark } from '../lib/pose/angles'
 import { LM } from '../lib/pose/angles'
 import { MovementDiagram } from './MovementDiagram'
-import { usePose } from './usePose'
+import { usePose, type FrameData } from './usePose'
+import { drawBlurred } from './blur'
 
 const SKELETON: Array<[number, number]> = [
   [LM.leftShoulder, LM.rightShoulder],
@@ -38,22 +39,42 @@ interface Props {
 
 export function CameraCoach({ movement, onDone, onSkip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  /** 虚化后的画面画在这张上,开虚化时它盖住 <video> */
+  const camCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [blur, setBlur] = useState(true)
   const stateRef = useRef<CheckState>(initState())
   const [out, setOut] = useState<CheckOutput | null>(null)
+
+  /**
+   * 🔴 换动作时清零。
+   * App 渲染 CameraCoach 时没给 key,所以换动作时 React 复用同一个组件实例,
+   * 而 useRef(initState()) 只在首次挂载跑一次 —— 次数会从上一个动作接着数。
+   * 这里不用 key 强制重挂载,因为那会把摄像头流一起拆掉,每换一个动作都要重开一次。
+   */
+  useEffect(() => {
+    stateRef.current = initState()
+    setOut(null)
+  }, [movement.id])
 
   const checker = movement.poseCheck ? CHECKERS[movement.poseCheck] : null
   const target = movement.reps ?? 0
 
   const handleFrame = useCallback(
-    (lms: Landmark[]) => {
-      draw(canvasRef.current, lms)
+    (f: FrameData) => {
+      const cam = camCanvasRef.current
+      const vid = videoRef.current
+      if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH)
+      draw(canvasRef.current, f.landmarks)
       if (!checker) return
-      setOut(checker(lms, stateRef.current, performance.now()))
+      setOut(checker(f.landmarks, stateRef.current, performance.now()))
     },
-    [checker],
+    // videoRef 是稳定的 ref,不用进依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [checker, blur],
   )
 
-  const { videoRef, status, message, start, stop } = usePose(handleFrame)
+  const { videoRef, status, message, start, stop, cameras, cameraId, pickCamera, canZoom, widen } =
+    usePose(handleFrame, blur)
 
   const reps = out?.reps ?? 0
   const done = target > 0 && reps >= target
@@ -79,7 +100,14 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       {status !== 'running' && <MovementDiagram movementId={movement.id} />}
 
       <div className="stage">
-        <video ref={videoRef} playsInline muted className="cam" />
+        <video ref={videoRef} playsInline muted className="cam" style={{ opacity: blur ? 0 : 1 }} />
+        <canvas
+          ref={camCanvasRef}
+          width={640}
+          height={480}
+          className="cam"
+          style={{ display: blur ? 'block' : 'none' }}
+        />
         <canvas ref={canvasRef} width={640} height={480} className="overlay" />
         {status !== 'running' && (
           <div className="stage-cover">
@@ -114,6 +142,32 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
         </div>
         <p className={out && !out.confident ? 'feedback unsure' : 'feedback'}>{feedback}</p>
       </div>
+
+      {status === 'running' && (
+        <div className="camctl">
+          <button className={blur ? 'chip on' : 'chip'} onClick={() => setBlur((b) => !b)}>
+            Blur background
+          </button>
+          {canZoom && (
+            <button className="chip" onClick={() => void widen()}>
+              Widest view
+            </button>
+          )}
+          {cameras.length > 1 && (
+            <select
+              className="chip"
+              value={cameraId ?? ''}
+              onChange={(e) => void pickCamera(e.target.value)}
+            >
+              {cameras.map((c) => (
+                <option key={c.deviceId} value={c.deviceId}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       <p className="stop-if">{movement.stopIf}</p>
 

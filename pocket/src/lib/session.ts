@@ -19,6 +19,8 @@ export interface SessionInput {
   energy: Energy
   /** 合租/办公室等不能出声的场合 */
   quietOnly: boolean
+  /** 周围没人。false 时只给看不出来是在运动的动作 */
+  alone: boolean
 }
 
 export interface SessionItem {
@@ -57,6 +59,12 @@ function reasonFor(m: Movement, input: SessionInput): string {
   if (m.poseCheck) {
     return 'The camera can check this one, so you get feedback on the shape.'
   }
+  // 放在动作各自的理由之后:否则"有人在场"模式下六张卡片会显示同一句话
+  if (!input.alone) {
+    return m.seconds
+      ? 'Done sitting or standing still. It reads as a stretch, not a workout.'
+      : 'Small enough that nobody looks up.'
+  }
   if (input.sore.length > 0) {
     return `Nothing in this one loads the areas you marked sore.`
   }
@@ -73,7 +81,7 @@ function reasonFor(m: Movement, input: SessionInput): string {
 export function composeSession(input: SessionInput): Session {
   const budget = Math.max(0, input.minutes * 60 - BUFFER_SECONDS)
 
-  let pool = MOVEMENTS.filter((m) => isAllowed(m, input.place, input.sore, input.quietOnly))
+  let pool = MOVEMENTS.filter((m) => isAllowed(m, input.place, input.sore, input.quietOnly, input.alone))
 
   if (input.energy === 'low') {
     const soft = pool.filter((m) => LOW_ENERGY_PATTERNS.has(m.pattern))
@@ -134,6 +142,9 @@ function headlineFor(input: SessionInput, count: number): string {
   if (count === 0) return 'Not enough time for anything useful. Take the gap off.'
   const where = input.place === 'desk' ? 'at your desk' : input.place === 'floor' ? 'on the floor' : 'in the gym'
   // 标了很多酸痛时要说清楚课为什么变短了,否则用户只看到"少了"而不知道原因
+  if (!input.alone) {
+    return `${plural(count, 'quiet movement')} ${where}. Nothing here looks like exercising.`
+  }
   if (input.sore.length >= 3) {
     return `${plural(count, 'gentle movement')} ${where}. You marked a lot as sore, so this is mobility only.`
   }

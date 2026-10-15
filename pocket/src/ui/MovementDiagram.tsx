@@ -5,7 +5,13 @@
  * 文字讲不了髋铰链。这里给两帧简笔画:起始 和 到位,中间一个箭头。
  *
  * 刻意保持简笔:不用真人照片,因为受访数据里"看到别人的身材"会引发比较。
+ *
+ * 动起来:两帧之间按关节插值,来回循环。静止两帧看不出"怎么过去的" ——
+ * 髋铰链和屈膝的区别全在中间那段路径上,这正是受访者说看不懂的地方。
+ * 没有用 3D 骨骼引擎,因为插值本身就能表达路径,而且零依赖、手机上不掉帧。
  */
+
+import { useEffect, useRef, useState } from 'react'
 
 interface Pose {
   head: [number, number]
@@ -64,6 +70,46 @@ const FRAMES: Record<string, { a: PoseKey; b: PoseKey; labelA: string; labelB: s
   'calf-raise':         { a: 'flat',        b: 'toes',      labelA: 'Flat',   labelB: 'Up on toes' },
 }
 
+const JOINTS: Array<keyof Pose> = ['head', 'shoulder', 'elbow', 'hand', 'hip', 'knee', 'ankle']
+
+/** 两个姿势之间按 t∈[0,1] 插值。 */
+function lerpPose(a: Pose, b: Pose, t: number): Pose {
+  const out = {} as Pose
+  for (const j of JOINTS) {
+    out[j] = [a[j][0] + (b[j][0] - a[j][0]) * t, a[j][1] + (b[j][1] - a[j][1]) * t]
+  }
+  return out
+}
+
+/** 缓入缓出:匀速插值看着像机器人,两端放慢才像人在动。 */
+const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
+
+const CYCLE_MS = 2600
+
+/**
+ * 来回循环的进度 0→1→0。
+ * 尊重 prefers-reduced-motion:系统里关了动画效果就停在到位那一帧。
+ */
+function useCycle(enabled: boolean) {
+  const [t, setT] = useState(0)
+  const raf = useRef(0)
+  useEffect(() => {
+    if (!enabled) {
+      setT(1)
+      return
+    }
+    const start = performance.now()
+    const tick = (now: number) => {
+      const p = ((now - start) % CYCLE_MS) / CYCLE_MS
+      setT(ease(p < 0.5 ? p * 2 : (1 - p) * 2))
+      raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf.current)
+  }, [enabled])
+  return t
+}
+
 function Figure({ pose, dim = false }: { pose: Pose; dim?: boolean }) {
   const stroke = dim ? 'rgba(147,161,177,.55)' : 'var(--accent)'
   const L = (a: [number, number], b: [number, number], key: string) => (
@@ -83,25 +129,33 @@ function Figure({ pose, dim = false }: { pose: Pose; dim?: boolean }) {
 
 export function MovementDiagram({ movementId }: { movementId: string }) {
   const f = FRAMES[movementId]
+  const reduced =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  const t = useCycle(!reduced && !!f)
   if (!f) return null
+
+  const a = POSES[f.a]
+  const b = POSES[f.b]
+
   return (
     <div className="diagram">
-      <figure>
-        <svg viewBox="0 0 100 124" role="img" aria-label={`${f.labelA} position`}>
-          <Figure pose={POSES[f.a]} dim />
+      {/* 动画:整个动作怎么走过去 */}
+      <figure className="animated">
+        <svg viewBox="0 0 100 124" role="img" aria-label={`${f.labelA} to ${f.labelB}`}>
+          {/* 淡淡的起止两帧当轨迹参照,主图在中间动 */}
+          <g opacity={0.16}>
+            <Figure pose={a} dim />
+            <Figure pose={b} dim />
+          </g>
+          <Figure pose={lerpPose(a, b, t)} />
         </svg>
-        <figcaption>{f.labelA}</figcaption>
+        <figcaption>{t < 0.5 ? f.labelA : f.labelB}</figcaption>
       </figure>
 
-      <div className="arrow" aria-hidden="true">
-        <svg viewBox="0 0 40 24">
-          <path d="M4 12 H30 M24 6 L32 12 L24 18" stroke="var(--muted)" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-
+      {/* 到位那一帧单独放大,因为深度/幅度要看定格 */}
       <figure>
         <svg viewBox="0 0 100 124" role="img" aria-label={`${f.labelB} position`}>
-          <Figure pose={POSES[f.b]} />
+          <Figure pose={b} />
         </svg>
         <figcaption>{f.labelB}</figcaption>
       </figure>

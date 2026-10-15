@@ -13,6 +13,18 @@ export type BodyArea = 'neck' | 'shoulder' | 'back' | 'hip' | 'knee' | 'ankle' |
 export type Pattern = 'squat' | 'hinge' | 'push' | 'pull' | 'mobility' | 'carry'
 export type PoseCheckId = 'squat-depth' | 'hinge-back' | 'shoulder-range'
 
+/**
+ * 别人会不会注意到你在运动。
+ * 这一维是用户测试逼出来的:受访者说办公室有人时不做显眼的动作,没人时什么都做。
+ * 门槛不是办公室、也不是运动本身,是"被看见",而且取决于做哪个动作。
+ *
+ *   discreet — 看着像在工位上伸懒腰。坐着或站着不动。
+ *   obvious  — 看着像在运动。要蹲下、趴下或者大幅度动。
+ *
+ * 和 noise 是同一类约束:共用办公室既不能吵,也不能显眼。我们之前只解决了一半。
+ */
+export type Visibility = 'discreet' | 'obvious'
+
 export interface Movement {
   id: string
   name: string
@@ -25,6 +37,8 @@ export interface Movement {
   workClothes: boolean
   /** 这个动作主要压到哪些部位。用户报了酸痛就避开。 */
   loads: BodyArea[]
+  /** 周围有人时能不能做,见 Visibility */
+  visibility: Visibility
   /** 单组默认剂量 */
   reps?: number
   seconds?: number
@@ -46,6 +60,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['knee', 'hip'],
+    visibility: 'obvious',
     reps: 10,
     costSeconds: 70,
     poseCheck: 'squat-depth',
@@ -61,6 +76,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['back', 'hip'],
+    visibility: 'obvious',
     reps: 8,
     costSeconds: 70,
     poseCheck: 'hinge-back',
@@ -76,6 +92,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['shoulder', 'wrist'],
+    visibility: 'obvious',
     reps: 10,
     costSeconds: 70,
     poseCheck: undefined,
@@ -91,6 +108,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['back', 'shoulder'],
+    visibility: 'obvious',
     reps: 10,
     costSeconds: 75,
     stopIf: 'Stop if your shoulder catches.',
@@ -105,6 +123,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['shoulder'],
+    visibility: 'discreet',
     seconds: 40,
     costSeconds: 55,
     poseCheck: 'shoulder-range',
@@ -120,6 +139,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['neck'],
+    visibility: 'discreet',
     seconds: 40,
     costSeconds: 50,
     stopIf: 'Stop if anything shoots down your arm.',
@@ -134,6 +154,7 @@ export const MOVEMENTS: Movement[] = [
     space: 'small',
     workClothes: false,
     loads: ['hip', 'knee'],
+    visibility: 'obvious',
     seconds: 60,
     costSeconds: 75,
     stopIf: 'Stop if your knee hurts on the floor.',
@@ -148,9 +169,70 @@ export const MOVEMENTS: Movement[] = [
     space: 'none',
     workClothes: true,
     loads: ['ankle'],
+    visibility: 'discreet',
     reps: 15,
     costSeconds: 60,
     stopIf: 'Stop if your achilles stings.',
+  },
+  {
+    id: 'eye-exercises',
+    name: 'Eye exercises',
+    cues: ['Look far, then near', 'Blink fully'],
+    pattern: 'mobility',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: [],
+    visibility: 'discreet',
+    seconds: 60,
+    costSeconds: 65,
+    stopIf: 'Stop if you get a headache or your vision blurs.',
+  },
+  {
+    id: 'neck-acupressure',
+    name: 'Neck pressure points',
+    cues: ['Thumbs at the base of the skull', 'Press, hold, release'],
+    pattern: 'mobility',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: ['neck'],
+    visibility: 'discreet',
+    seconds: 45,
+    costSeconds: 50,
+    stopIf: 'Press firmly, never sharply. Stop if it feels pointed rather than dull.',
+  },
+  {
+    id: 'seated-twist',
+    name: 'Seated twist',
+    cues: ['Sit tall first', 'Turn from the ribs'],
+    pattern: 'mobility',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: ['back'],
+    visibility: 'discreet',
+    seconds: 40,
+    costSeconds: 45,
+    stopIf: 'Stop if it pinches in the lower back rather than stretching.',
+  },
+  {
+    id: 'wrist-stretch',
+    name: 'Wrist and forearm stretch',
+    cues: ['Fingers down, then up', 'Elbow straight'],
+    pattern: 'mobility',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: ['wrist'],
+    visibility: 'discreet',
+    seconds: 40,
+    costSeconds: 45,
+    stopIf: 'Stop if you feel pins and needles in your fingers.',
   },
 ]
 
@@ -159,10 +241,18 @@ export function byId(id: string): Movement | undefined {
 }
 
 /** 这个动作在这个场合能不能做。🔴 只做排除,不做打分 —— 打分在 session 层。 */
-export function isAllowed(m: Movement, place: Place, sore: BodyArea[], quietOnly: boolean): boolean {
+export function isAllowed(
+  m: Movement,
+  place: Place,
+  sore: BodyArea[],
+  quietOnly: boolean,
+  alone = true,
+): boolean {
   if (!m.places.includes(place)) return false
   if (place === 'desk' && !m.workClothes) return false
   if (quietOnly && m.noise !== 'quiet') return false
+  // 周围有人时只给看不出来是在运动的动作
+  if (!alone && m.visibility !== 'discreet') return false
   // 🔴 酸痛 ≠ 不能动。区别在于是"加负荷"还是"活动开":
   //   力量/负重动作压到酸痛部位  → 排除
   //   活动度动作针对酸痛部位      → 恰恰是该做的,保留

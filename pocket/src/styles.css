@@ -1,14 +1,52 @@
-/* Pocket — 深色、大字、单手可达。为"手机放在地上、手臂伸直看"的场景设计。 */
+/* Pocket — 大字、单手可达。
+ *
+ * 🔴 为什么默认浅色:
+ * 深色是早期按"在家把手机放地上、手臂伸直看"的场景定的。实际场景是工位、亮屏幕、
+ * 开放式办公室。用户测试里两件事同时指向浅色:一是觉得暗,二是满屏深色在工位显示器上
+ * 隔很远就看得出"这不是在工作" —— 恰好在用户最不想被注意的时候把他暴露了。
+ * 深色留作可切换,因为在家关灯做的时候它仍然更好。
+ */
 
 :root {
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --line: #e2e6ec;
+  --ink: #1a1f26;
+  --muted: #68727f;
+  --accent: #1f8f6b;
+  --on-accent: #ffffff;
+  --warn: #b3701a;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
   --bg: #12161c;
   --panel: #1b212a;
   --line: #2b3440;
   --ink: #eef2f6;
   --muted: #93a1b1;
   --accent: #7ddcbe;
+  --on-accent: #10231d;
   --warn: #f0b866;
+  --shadow: none;
   color-scheme: dark;
+}
+
+/* 没明确选过的话跟随系统 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #12161c;
+    --panel: #1b212a;
+    --line: #2b3440;
+    --ink: #eef2f6;
+    --muted: #93a1b1;
+    --accent: #7ddcbe;
+    --on-accent: #10231d;
+    --warn: #f0b866;
+    --shadow: none;
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -51,7 +89,7 @@ button {
 }
 button:active { transform: scale(.985); }
 
-.primary { background: var(--accent); color: #10231d; border-color: transparent; font-weight: 650; }
+.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 650; }
 .primary.big { padding: 18px; font-size: 18px; }
 .ghost { background: transparent; }
 .back { align-self: flex-start; background: transparent; border: none; color: var(--muted); padding: 4px 0; }
@@ -63,7 +101,7 @@ button:active { transform: scale(.985); }
   padding: 18px;
   border-radius: 12px;
   background: var(--accent);
-  color: #10231d;
+  color: var(--on-accent);
   font-weight: 650;
   cursor: pointer;
 }
@@ -84,12 +122,12 @@ button:active { transform: scale(.985); }
 .label { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 9px 13px; font-size: 14px; border-radius: 999px; }
-.chip.on { background: var(--accent); color: #10231d; border-color: transparent; font-weight: 600; }
+.chip.on { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
 
 .sore { margin-top: 4px; }
 
 .plan { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
-.plan li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.plan li { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
 .plan-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .dose { color: var(--accent); font-size: 14px; white-space: nowrap; }
 .reason { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
@@ -107,7 +145,7 @@ button:active { transform: scale(.985); }
 .stage-cover {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px; padding: 16px;
-  background: rgba(18, 22, 28, .92); text-align: center;
+  background: color-mix(in srgb, var(--bg) 92%, transparent); text-align: center;
   overflow-y: auto;   /* 小屏上内容比画面高时可滚,不被裁掉 */
 }
 .stage-cover p { font-size: 14px; }
@@ -144,3 +182,25 @@ button:active { transform: scale(.985); }
 .diagram figcaption { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .diagram .arrow { flex: 0 0 34px; }
 .diagram .arrow svg { width: 34px; height: 20px; }
+
+/* ---------- 主题切换 ---------- */
+.topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.theme-toggle {
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 999px; padding: 7px 12px; font-size: 13px; line-height: 1;
+}
+.theme-toggle:hover { color: var(--ink); }
+
+/* ---------- 周围有人吗 ---------- */
+.alone { margin: 20px 0 0; }
+.alone .chips { margin-top: 6px; }
+.alone-hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+/* ---------- 摄像头控制条 ---------- */
+.camctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.camctl select.chip {
+  appearance: none; -webkit-appearance: none;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 9px 13px; font: inherit; font-size: 14px; max-width: 190px;
+}

@@ -14,6 +14,11 @@ import type { Landmark } from '../lib/pose/angles'
 
 export type PoseStatus = 'idle' | 'loading' | 'running' | 'denied' | 'error'
 
+export interface CamOption {
+  deviceId: string
+  label: string
+}
+
 interface UsePoseResult {
   videoRef: React.RefObject<HTMLVideoElement>
   status: PoseStatus
@@ -22,12 +27,32 @@ interface UsePoseResult {
   landmarks: Landmark[]
   start: () => Promise<void>
   stop: () => void
+  /** 可选的摄像头。手机上超广角会是单独一个设备 */
+  cameras: CamOption[]
+  cameraId: string | null
+  pickCamera: (id: string) => Promise<void>
+  /**
+   * 这个摄像头能不能变焦。
+   * 🔴 镜头视野是硬件定死的,软件变不宽。能做的只有两件:
+   *    1. 设备里有超广角镜头就让用户选它(手机常见,笔记本基本没有)
+   *    2. 支持 zoom 的话推到最小 —— 等于不裁切,是这颗镜头能给的最宽画面
+   */
+  canZoom: boolean
+  widen: () => Promise<void>
 }
 
 const WASM_PATH = `${import.meta.env.BASE_URL}mediapipe/wasm`
 const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_lite.task`
 
-export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
+export interface FrameData {
+  landmarks: Landmark[]
+  /** 人像蒙版,0..1。开了虚化才有 */
+  mask: Float32Array | null
+  maskW: number
+  maskH: number
+}
+
+export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): UsePoseResult {
   const videoRef = useRef<HTMLVideoElement>(null!)
   const landmarkerRef = useRef<PoseLandmarker | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -39,6 +64,11 @@ export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
   const [status, setStatus] = useState<PoseStatus>('idle')
   const [message, setMessage] = useState<string | null>(null)
   const [landmarks, setLandmarks] = useState<Landmark[]>([])
+  const [cameras, setCameras] = useState<CamOption[]>([])
+  const [cameraId, setCameraId] = useState<string | null>(null)
+  const [canZoom, setCanZoom] = useState(false)
+  const wantMaskRef = useRef(wantMask)
+  wantMaskRef.current = wantMask
 
   const stop = useCallback(() => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
@@ -66,12 +96,91 @@ export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
         const res: PoseLandmarkerResult = lm.detectForVideo(v, ts)
         const pts = (res.landmarks?.[0] ?? []) as Landmark[]
         setLandmarks(pts)
-        onFrameRef.current?.(pts)
+
+        const mp = res.segmentationMasks?.[0]
+        let mask: Float32Array | null = null
+        let maskW = 0
+        let maskH = 0
+        if (mp) {
+          mask = mp.getAsFloat32Array()
+          maskW = mp.width
+          maskH = mp.height
+        }
+        onFrameRef.current?.({ landmarks: pts, mask, maskW, maskH })
+        // MPMask 持有 GPU/WASM 资源,用完必须还,否则几十帧之后就爆
+        mp?.close()
       } catch {
         // 单帧失败不该中断整个会话 —— 吞掉,下一帧继续(借鉴 licha 的自吞式投递)
       }
     }
     rafRef.current = requestAnimationFrame(loop)
+  }, [])
+
+  /** 开(或换)一路摄像头流。deviceId 为 null 表示让浏览器挑默认的前置。 */
+  const openStream = useCallback(
+    async (deviceId: string | null) => {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: deviceId
+          ? { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+          : { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      })
+      streamRef.current = stream
+      const v = videoRef.current
+      if (!v) return
+      v.srcObject = stream
+      await v.play()
+
+      const track = stream.getVideoTracks()[0]
+      setCameraId(track?.getSettings().deviceId ?? null)
+      // 变焦支持是逐设备的,而且不在 TS 的标准类型里
+      const caps = (track?.getCapabilities?.() ?? {}) as { zoom?: { min: number; max: number } }
+      setCanZoom(typeof caps.zoom?.min === 'number' && caps.zoom.max > caps.zoom.min)
+
+      // 只有拿到权限之后 label 才非空,所以枚举放在这里
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices()
+        setCameras(
+          all
+            .filter((d) => d.kind === 'videoinput')
+            .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` })),
+        )
+      } catch {
+        /* 枚举失败不影响already开着的那一路 */
+      }
+
+      setStatus('running')
+      setMessage(null)
+      lastTsRef.current = -1
+      if (rafRef.current == null) rafRef.current = requestAnimationFrame(loop)
+    },
+    [loop],
+  )
+
+  const pickCamera = useCallback(
+    async (id: string) => {
+      try {
+        await openStream(id)
+      } catch (e) {
+        setStatus('error')
+        setMessage(`Could not switch camera: ${(e as Error).message}`)
+      }
+    },
+    [openStream],
+  )
+
+  /** 把变焦推到最小 —— 这颗镜头能给的最宽画面。不能让镜头本身变广角。 */
+  const widen = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    const caps = (track.getCapabilities?.() ?? {}) as { zoom?: { min: number } }
+    if (typeof caps.zoom?.min !== 'number') return
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] } as unknown as MediaTrackConstraints)
+    } catch {
+      /* 有些设备报告支持但实际拒绝,忽略 */
+    }
   }, [])
 
   const start = useCallback(async () => {
@@ -84,6 +193,8 @@ export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
           baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
+          // 人像蒙版直接从姿态模型取,不用再下一个分割模型
+          outputSegmentationMasks: wantMaskRef.current,
         })
       }
     } catch (e) {
@@ -93,19 +204,7 @@ export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      })
-      streamRef.current = stream
-      const v = videoRef.current
-      if (!v) return
-      v.srcObject = stream
-      await v.play()
-      setStatus('running')
-      setMessage(null)
-      lastTsRef.current = -1
-      rafRef.current = requestAnimationFrame(loop)
+      await openStream(null)
     } catch (e) {
       const err = e as DOMException
       if (err.name === 'NotAllowedError') {
@@ -116,9 +215,9 @@ export function usePose(onFrame?: (lms: Landmark[]) => void): UsePoseResult {
         setMessage(`Camera failed: ${err.message}`)
       }
     }
-  }, [loop])
+  }, [openStream])
 
   useEffect(() => stop, [stop])
 
-  return { videoRef, status, message, landmarks, start, stop }
+  return { videoRef, status, message, landmarks, start, stop, cameras, cameraId, pickCamera, canZoom, widen }
 }

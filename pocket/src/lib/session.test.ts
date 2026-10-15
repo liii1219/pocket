@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { composeSession, type SessionInput } from './session'
 
-const base: SessionInput = { minutes: 15, place: 'desk', sore: [], energy: 'ok', quietOnly: true }
+const base: SessionInput = { minutes: 15, place: 'desk', sore: [], energy: 'ok', quietOnly: true, alone: true }
 
 describe('composeSession', () => {
   it('同样的输入给同样的输出(可复现,不随机)', () => {
@@ -104,5 +104,30 @@ describe('composeSession', () => {
   it('只有一个动作时用单数', () => {
     const s = composeSession({ ...base, minutes: 2 })
     expect(s.headline).not.toMatch(/1 movements/)
+  })
+
+  /* --- visibility:周围有人时只给看不出来的动作 --------------------- */
+
+  it('周围有人时不给显眼的动作', () => {
+    const s = composeSession({ ...base, minutes: 10, alone: false })
+    expect(s.items.length).toBeGreaterThan(0)
+    expect(s.items.every((i) => i.movement.visibility === 'discreet')).toBe(true)
+  })
+
+  it('周围有人时仍然排得满,不是只剩一个', () => {
+    // 加入眼保健操/穴位按摩/坐姿拉伸之前,discreet 只有三个而且全是 mobility,
+    // 会被 pattern 去重挤成一个。这条守住"有人在场也有完整一节课"。
+    const s = composeSession({ ...base, minutes: 10, alone: false })
+    expect(s.items.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('周围有人时标题要说清楚', () => {
+    const s = composeSession({ ...base, minutes: 10, alone: false })
+    expect(s.headline).toMatch(/Nothing here looks like exercising/)
+  })
+
+  it('一个人时拿得到显眼的动作', () => {
+    const s = composeSession({ ...base, minutes: 10, alone: true })
+    expect(s.items.some((i) => i.movement.visibility === 'obvious')).toBe(true)
   })
 })
