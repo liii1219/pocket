@@ -9,7 +9,7 @@
  * 头顶 / 身体两侧远端 / 耳朵旁边。所以这里直接把候选位置画出来。
  */
 
-import { targetSpots, targetTrack } from '../lib/pose/checkers'
+import { targetGateCue, targetSpots, targetTrack } from '../lib/pose/checkers'
 
 /** 画面比例和摄像头一致(4:3),这样预览里的位置和实际位置对得上。 */
 const W = 100
@@ -18,6 +18,7 @@ const H = 75
 export function TargetPreview({ checkId }: { checkId: string }) {
   const spots = targetSpots(checkId)
   const track = targetTrack(checkId)
+  const gate = targetGateCue(checkId)
   if (spots.length === 0 || !track) return null
 
   const useHead = track === 'head'
@@ -64,6 +65,8 @@ export function TargetPreview({ checkId }: { checkId: string }) {
         Circles appear here, one at a time. Touch each one with{' '}
         {useHead ? 'your head' : 'either hand'} and the next one moves somewhere else.
       </p>
+      {/* 有姿势条件的话必须先说 —— 否则这几个动作看起来是同一个游戏 */}
+      {gate && <p className="targetpreview-gate">{gate}</p>}
     </div>
   )
 }

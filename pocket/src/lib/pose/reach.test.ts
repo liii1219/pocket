@@ -168,3 +168,74 @@ d3('用头碰目标', () => {
     e3(targetRadius('head-target')).toBeLessThan(targetRadius('reach-target'))
   })
 })
+
+/* 姿势条件:碰到圈不等于做对了 */
+import { describe as d4, it as i4, expect as e4 } from 'vitest'
+import { targetGateCue } from './checkers'
+
+/** 肩-肘-腕的夹角由 elbow 决定;twist 控制肩膀朝向。 */
+function reachPose(o: { elbow: number; twist?: number }): Landmark[] {
+  const { elbow, twist = 0 } = o
+  const lms = withWrists(0.4, 0.75, 0.6, 0.75)
+  const rad = (twist * Math.PI) / 180
+  const half = 0.11
+  lms[LM.leftShoulder] = { x: 0.5 - half * Math.cos(rad), y: 0.38, z: -half * Math.sin(rad), visibility: 0.95 }
+  lms[LM.rightShoulder] = { x: 0.5 + half * Math.cos(rad), y: 0.38, z: half * Math.sin(rad), visibility: 0.95 }
+  // 肘放在肩下方,腕按夹角摆
+  const a = (elbow * Math.PI) / 180
+  for (const [s, e, w] of [
+    [LM.leftShoulder, LM.leftElbow, LM.leftWrist],
+    [LM.rightShoulder, LM.rightElbow, LM.rightWrist],
+  ] as const) {
+    const s0 = lms[s]
+    lms[e] = { x: s0.x, y: s0.y + 0.14, z: s0.z, visibility: 0.95 }
+    lms[w] = {
+      x: s0.x + 0.14 * Math.cos(a - Math.PI / 2),
+      y: s0.y + 0.14 + 0.14 * Math.sin(a - Math.PI / 2),
+      z: s0.z,
+      visibility: 0.95,
+    }
+  }
+  return lms
+}
+
+d4('姿势条件', () => {
+  i4('过头上举:弯着胳膊碰到圈不算,并说明原因', () => {
+    let s = checkReachHigh(resting(), initState(), 0)
+    const bent = reachPose({ elbow: 90 })
+    bent[LM.leftWrist] = { x: s.targetX!, y: s.targetY!, z: 0, visibility: 0.95 }
+    const out = checkReachHigh(bent, s, 1000, bent)
+    e4(out.reps).toBe(0)
+    e4(out.cue).toMatch(/Straighten/)
+  })
+
+  i4('过头上举:伸直了就算', () => {
+    let s = checkReachHigh(resting(), initState(), 0)
+    const straight = reachPose({ elbow: 175 })
+    straight[LM.leftWrist] = { x: s.targetX!, y: s.targetY!, z: 0, visibility: 0.95 }
+    e4(checkReachHigh(straight, s, 1000, straight).reps).toBe(1)
+  })
+
+  i4('转体:只伸手不转身不算', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    const noTurn = reachPose({ elbow: 170, twist: 0 })
+    noTurn[LM.leftWrist] = { x: s.targetX!, y: s.targetY!, z: 0, visibility: 0.95 }
+    const out = checkReachCross(noTurn, s, 1000, noTurn)
+    e4(out.reps).toBe(0)
+    e4(out.cue).toMatch(/Turn the shoulders/)
+  })
+
+  i4('转体:转过去就算', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    const turned = reachPose({ elbow: 170, twist: 35 })
+    turned[LM.leftWrist] = { x: s.targetX!, y: s.targetY!, z: 0, visibility: 0.95 }
+    e4(checkReachCross(turned, s, 1000, turned).reps).toBe(1)
+  })
+
+  i4('通用的碰圈没有额外条件', () => {
+    e4(targetGateCue('reach-target')).toBeNull()
+    e4(targetGateCue('head-target')).toBeNull()
+    e4(targetGateCue('reach-high')).not.toBeNull()
+    e4(targetGateCue('reach-cross')).not.toBeNull()
+  })
+})

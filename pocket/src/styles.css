@@ -253,3 +253,7 @@ button:active { transform: scale(.985); }
 }
 .targetpreview svg { width: 100%; max-width: 300px; display: block; margin: 0 auto; }
 .targetpreview-note { color: var(--muted); font-size: 13px; margin: 8px 0 0; line-height: 1.5; }
+.targetpreview-gate {
+  color: var(--ink); font-size: 13px; margin: 8px 0 0; line-height: 1.5;
+  border-left: 2px solid var(--accent); padding-left: 10px;
+}

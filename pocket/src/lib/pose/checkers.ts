@@ -490,6 +490,18 @@ interface TargetSpec {
   spots: Array<[number, number]>
   /** 碰到的判定半径 */
   radius: number
+  /**
+   * 姿势条件。碰到圈只是必要条件,这个不满足就不算一次。
+   *
+   * 🔴 为什么需要:只判位置的话,三个动作会变成同一个游戏 ——
+   * 肩部打开可以弯着胳膊够到,转体可以不转身只伸手。圈管得了"够到没有",
+   * 管不了"是不是用这个动作够到的",而后者才是这个动作存在的理由。
+   */
+  gate?: {
+    test: (lms: Landmark[], world?: Landmark[]) => boolean
+    /** 碰到了但姿势不对时说什么 */
+    cue: string
+  }
 }
 
 const TARGET_SPECS = {
@@ -504,7 +516,7 @@ const TARGET_SPECS = {
       [0.50, 0.12],
     ],
   },
-  /** 全在头顶上方:逼出过头上举 */
+  /** 全在头顶上方 + 要求手臂伸直:逼出真正的过头上举,而不是弯着胳膊够一下 */
   'reach-high': {
     track: 'wrists',
     radius: 0.09,
@@ -513,8 +525,21 @@ const TARGET_SPECS = {
       [0.40, 0.06], [0.60, 0.06],
       [0.50, 0.12],
     ],
+    gate: {
+      test: (lms, world) => {
+        const W = world ?? lms
+        const a = angleDeg(W[LM.leftShoulder], W[LM.leftElbow], W[LM.leftWrist])
+        const b = angleDeg(W[LM.rightShoulder], W[LM.rightElbow], W[LM.rightWrist])
+        const straightest = Math.max(
+          Number.isNaN(a) ? 0 : a,
+          Number.isNaN(b) ? 0 : b,
+        )
+        return straightest > 140
+      },
+      cue: 'Straighten the arm as you reach. Bending it does not open the shoulder.',
+    },
   },
-  /** 全在身体对侧:要够到必须转体 */
+  /** 全在身体对侧 + 要求肩膀真的转过去:光伸手不算 */
   'reach-cross': {
     track: 'wrists',
     radius: 0.09,
@@ -523,6 +548,14 @@ const TARGET_SPECS = {
       [0.10, 0.22], [0.90, 0.22],
       [0.06, 0.55], [0.94, 0.55],
     ],
+    gate: {
+      test: (_lms, world) => {
+        if (!world) return true
+        const twist = torsoTwistDeg(world)
+        return !Number.isNaN(twist) && twist > 18
+      },
+      cue: 'Turn the shoulders, do not just stretch the arm out.',
+    },
   },
   /** 用头去碰,放在耳朵外侧:逼出头侧倾 */
   'head-target': {
@@ -565,7 +598,7 @@ function makeTargetChecker(id: TargetCheckId): PoseChecker {
   const spec = TARGET_SPECS[id] as TargetSpec
   const idx = spec.track === 'head' ? HEAD_IDX : REACH_IDX
 
-  return (lms, state, t) => {
+  return (lms, state, t, world) => {
     if (!visibleEnough(lms, idx)) {
       return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, idx) }
     }
@@ -584,6 +617,10 @@ function makeTargetChecker(id: TargetCheckId): PoseChecker {
     const nearest = Math.min(...pts.map((p) => Math.hypot(p.x - s.targetX!, p.y - s.targetY!)))
 
     if (nearest <= spec.radius) {
+      // 碰到了,但姿势条件不满足 —— 不计数,给一条具体的纠正
+      if (spec.gate && !spec.gate.test(lms, world)) {
+        return { ...s, confident: true, cue: spec.gate.cue, angle: null, counted: false }
+      }
       s.reps += 1
       s.lastRepMs = s.downStartT > 0 ? t - s.downStartT : 0
       const [x, y] = farthestSpot(spec, pts)
@@ -612,6 +649,11 @@ export function targetRadius(id: string): number {
 export function targetSpots(id: string): Array<[number, number]> {
   const spec = (TARGET_SPECS as Record<string, TargetSpec>)[id]
   return spec ? spec.spots.map(([x, y]) => [x, y] as [number, number]) : []
+}
+
+/** 这个玩法除了碰到圈还要求什么。没有额外要求就是 null。 */
+export function targetGateCue(id: string): string | null {
+  return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.gate?.cue ?? null
 }
 
 /** 用手还是用头去碰。 */
