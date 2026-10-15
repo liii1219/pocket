@@ -193,29 +193,29 @@ export default function App() {
       <div className="field">
         <span className="label">How many movements?</span>
         <div className="field-row">
+          {/*
+            🔴 不禁用。禁用但带着滑块位置的控件看着像能拖,拖不动,
+            用户不知道是坏了还是不让拖。这里一拖就从"自动"切到手动,是它该有的行为。
+          */}
           <input
             type="range"
             min={1}
             max={MAX_ITEMS}
             value={count ?? session.items.length}
-            disabled={count === null}
             onChange={(e) => setCount(Number(e.target.value))}
           />
-          <output>{count === null ? `${session.items.length} (auto)` : count}</output>
+          <output>{count ?? session.items.length}</output>
         </div>
-        <div className="chips">
-          <button
-            className={count === null ? 'chip on' : 'chip'}
-            onClick={() => setCount(null)}
-          >
-            Let it decide
-          </button>
+        <p className="alone-hint">
+          {count === null
+            ? 'Filling the time you have. Drag to set it yourself.'
+            : 'You set this. '}
           {count !== null && (
-            <button className="chip" onClick={() => setCount(null)}>
-              Reset
+            <button className="linky" onClick={() => setCount(null)}>
+              Fill the time instead
             </button>
           )}
-        </div>
+        </p>
       </div>
 
       <div className="field">
@@ -246,6 +246,17 @@ export default function App() {
             {session.items.length} movement{session.items.length === 1 ? '' : 's'}, about{' '}
             {session.estimatedMinutes} min
           </p>
+          {/* 剩的时间多到说得出口就说,别让人自己去减 */}
+          {minutes - session.estimatedMinutes >= 3 && (
+            <p className="summary warn">
+              That leaves {minutes - session.estimatedMinutes} minutes spare.{' '}
+              {session.poolExhausted
+                ? alone
+                  ? 'There is nothing else in the library that fits.'
+                  : 'Switch to "Just me" for more to choose from.'
+                : 'Drag the count up to use more of it.'}
+            </p>
+          )}
           {session.shortfall === 'time' && (
             <p className="summary warn">
               You asked for {session.wanted}. Only {session.items.length} fit in {minutes} minutes.

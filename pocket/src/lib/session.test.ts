@@ -112,9 +112,9 @@ describe('composeSession', () => {
     expect(s.headline).toMatch(/marked a lot as sore/)
   })
 
-  it('不酸痛时的课不受影响', () => {
+  it('不酸痛时不提酸痛', () => {
     const s = composeSession({ ...base, minutes: 10 })
-    expect(s.items).toHaveLength(6)
+    expect(s.items.length).toBeGreaterThan(0)
     expect(s.headline).not.toMatch(/sore/)
   })
 
@@ -198,5 +198,66 @@ describe('composeSession', () => {
     const s = composeSession({ ...base, minutes: 3, maxItems: 8 })
     expect(s.wanted).toBe(8)
     expect(s.items.length).toBeLessThan(8)
+  })
+
+  /* --- 时长要真的被用上 --------------------------------------------- */
+
+  it('不指定数量时把时间填满,不卡在人为上限', () => {
+    // 回归:自动数量原来写死最多八个,十三分钟之后时长滑块就失效了 ——
+    // 说有十六分钟却给一节七分钟的课,那问时长没有意义。
+    const ten = composeSession({ ...base, minutes: 10 })
+    const twenty = composeSession({ ...base, minutes: 20 })
+    expect(twenty.items.length).toBeGreaterThan(ten.items.length)
+  })
+
+  it('填满之后仍然不超预算', () => {
+    for (const minutes of [5, 10, 15, 20]) {
+      const s = composeSession({ ...base, minutes })
+      const spent = s.items.reduce((n, i) => n + i.movement.costSeconds, 0)
+      expect(spent).toBeLessThanOrEqual(minutes * 60 - 60)
+    }
+  })
+
+  it('动作用完了就停,并报 pool,不重复硬凑', () => {
+    const s = composeSession({ ...base, minutes: 20, alone: false })
+    const ids = s.items.map((i) => i.movement.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  /* --- 自动模式下不该有"缺口"这回事 --------------------------------- */
+
+  it('自动模式永远不报缺口', () => {
+    // 回归:自动模式内部用了一个哨兵上限,结果界面上出现
+    // "You asked for 9007199254740991" —— 把内部实现端给了用户。
+    for (const minutes of [1, 5, 10, 16, 20]) {
+      for (const alone of [true, false]) {
+        const s = composeSession({ ...base, minutes, alone })
+        expect(s.shortfall).toBe('none')
+      }
+    }
+  })
+
+  it('自动模式下 wanted 等于实际给的数量,不是哨兵值', () => {
+    const s = composeSession({ ...base, minutes: 10 })
+    expect(s.wanted).toBe(s.items.length)
+    expect(s.wanted).toBeLessThan(100)
+  })
+
+  it('"还能再加一个吗":自己限制了数量就还能加', () => {
+    // 这个字段是用来回答界面上那句话的:时间还有富余时,
+    // 该说"拖一下数量"还是"库里没别的了"。
+    const capped = composeSession({ ...base, minutes: 20, maxItems: 3, alone: true })
+    expect(capped.poolExhausted).toBe(false)   // 是你自己限制的,拖一下就能多做
+  })
+
+  it('"还能再加一个吗":自动模式填到塞不下为止', () => {
+    const auto = composeSession({ ...base, minutes: 20, alone: false })
+    expect(auto.poolExhausted).toBe(true)      // 已经填满,拖了也没用
+  })
+
+  it('一个人时能排出的比有人在场时多', () => {
+    const few = composeSession({ ...base, minutes: 20, alone: false })
+    const many = composeSession({ ...base, minutes: 20, alone: true })
+    expect(many.items.length).toBeGreaterThan(few.items.length)
   })
 })

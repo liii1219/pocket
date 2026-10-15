@@ -42,8 +42,18 @@ export interface Session {
   items: SessionItem[]
   /** 想要的数量没满足时,是什么限制住了 */
   shortfall: Shortfall
-  /** 用户要的数量(没指定就是自动算的那个) */
+  /** 用户要的数量(没指定就是实际给的那个) */
   wanted: number
+  /**
+   * 还能不能再塞进一个动作。
+   *
+   * 🔴 不是"动作全用完了"。真正卡住一节课的常常是**去重规则**:
+   * 同一个部位/模式只取一个,所以有人在场时池子有十六个动作、
+   * 总耗时才八百多秒(预算一千一百多秒绰绰有余),却只排得出十一个。
+   * 时间和动作总数都不是瓶颈,"不重复"才是。
+   * 对用户来说只有一个问题:拖一下还能多做点吗。这个字段答的就是它。
+   */
+  poolExhausted: boolean
   /** 预计耗时(分钟,向上取整) */
   estimatedMinutes: number
   /** 整节课的一句话说明,显示在最上面 */
@@ -134,10 +144,13 @@ export function composeSession(input: SessionInput): Session {
 
   /**
    * 动作数量上限。
-   * 没指定时按时长估:五分钟三四个就满了,二十分钟给到八个。
-   * 用户可以自己调 —— 同样十分钟,有人想做八个短的,有人想做四个慢的。
+   *
+   * 🔴 不指定时就**把时间填满**,不设人为上限。
+   * 原来写死最多八个,结果十三分钟之后时长滑块就失效了 ——
+   * 你说有十六分钟,它给你一节七分钟的课,剩下九分钟不知去向,
+   * 那问时长就没有意义。现在交给预算和动作库去限制,它们是真实的边界。
    */
-  const cap = input.maxItems ?? Math.max(3, Math.min(8, Math.round(input.minutes * 0.6)))
+  const cap = input.maxItems ?? Number.MAX_SAFE_INTEGER
 
   const items: SessionItem[] = []
   const usedPatterns = new Set<string>()
@@ -180,16 +193,27 @@ export function composeSession(input: SessionInput): Session {
    *
    * 反过来写会出错:要 30 个、库里 18 个、时间刚好差一点塞不下最后两个,
    * 看起来"还有没用上的"就报成时间不够 —— 但真正的原因是库里压根没有 30 个。
+   *
+   * 🔴 只有用户**明确要了一个数**才谈得上缺口。
+   * 自动模式下他没要任何数量,"你要了 9007199254740991 个"这种话不该出现 ——
+   * 那是把内部的哨兵值直接端给了用户。
    */
+  const asked = input.maxItems
   let shortfall: Shortfall = 'none'
-  if (items.length < cap) {
-    shortfall = cap > ordered.length ? 'pool' : 'time'
+  if (asked != null && items.length < asked) {
+    shortfall = asked > ordered.length ? 'pool' : 'time'
   }
+
+  const remaining = budget - spent
+  const canAddMore = ordered.some(
+    (m) => !taken.has(m.id) && !usedPatterns.has(dedupeKey(m)) && m.costSeconds <= remaining,
+  )
 
   return {
     items,
     shortfall,
-    wanted: cap,
+    poolExhausted: !canAddMore,
+    wanted: asked ?? items.length,
     estimatedMinutes: Math.ceil(spent / 60),
     headline: headlineFor(input, items.length),
   }
