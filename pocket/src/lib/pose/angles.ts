@@ -135,22 +135,44 @@ export function framingHint(lms: Landmark[], idx: number[]): string {
     return p != null && (p.x <= 0.02 || p.x >= 0.98 || p.y <= 0.02 || p.y >= 0.98)
   }
   const bad = (i: number) => missing(i) || outside(i)
+  const needs = (i: number) => idx.includes(i)
 
-  const needsFeet = idx.includes(LM.leftAnkle) || idx.includes(LM.rightAnkle)
+  // 🔴 先看这个判定器**实际要什么**,再给建议。
+  // 原来一律按深蹲的需求(脚、膝、髋)判断,碰圆圈这种只要手腕的玩法
+  // 永远落到最后那句"侧身站" —— 而碰圆圈恰恰要正对镜头,建议是反的。
+  const wristsNeeded = needs(LM.leftWrist) || needs(LM.rightWrist)
+  const wristsBad = bad(LM.leftWrist) && bad(LM.rightWrist)
+  const oneWristBad = bad(LM.leftWrist) || bad(LM.rightWrist)
+
+  const earsNeeded = needs(LM.leftEar) || needs(LM.rightEar)
+  const earsBad = bad(LM.leftEar) && bad(LM.rightEar)
+
+  const feetNeeded = needs(LM.leftAnkle) || needs(LM.rightAnkle)
   const feetBad = bad(LM.leftAnkle) && bad(LM.rightAnkle)
   const kneesBad = bad(LM.leftKnee) && bad(LM.rightKnee)
   const hipsBad = bad(LM.leftHip) && bad(LM.rightHip)
+  const shouldersBad = bad(LM.leftShoulder) && bad(LM.rightShoulder)
 
-  if (needsFeet && feetBad) {
+  if (wristsNeeded && wristsBad) {
+    return 'I cannot see your hands. Move back, or tilt the camera down, until both hands are in the picture.'
+  }
+  if (earsNeeded && earsBad) {
+    return 'I cannot see your head clearly. Face the camera and make sure the room is lit.'
+  }
+  if (feetNeeded && feetBad) {
     if (hipsBad) return 'Too close. Step back until your whole body fits in the picture.'
     if (kneesBad) return 'I can only see your upper body. Move the camera back, or put it on the floor.'
     return 'Your feet are out of shot. Step back a little.'
   }
-  if (bad(LM.leftShoulder) && bad(LM.rightShoulder)) {
+  if (shouldersBad) {
     return 'I have lost your shoulders. Face the camera and make sure the room is lit.'
   }
-  return 'I cannot see you well enough to check this. Try standing side-on to the camera.'
+  if (wristsNeeded && oneWristBad) {
+    return 'One hand is out of shot. Keep both hands in the picture.'
+  }
+  return 'I cannot see you well enough. Keep your head, shoulders and hands in the picture.'
 }
+
 
 /** 三维向量夹角(度)。两个向量都给对象,只取 x/y/z。 */
 function vecAngleDeg(a: Vec3, b: Vec3): number {
