@@ -42,6 +42,14 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   /** 虚化后的画面画在这张上,开虚化时它盖住 <video> */
   const camCanvasRef = useRef<HTMLCanvasElement>(null)
   const [blur, setBlur] = useState(true)
+  /**
+   * 虚化实际走了哪条路。
+   * 'mask' = 用了分割蒙版(最准),'outline' = 蒙版没用,退回关键点框,
+   * 'none' = 两条都不成立,画的是原帧。
+   * 🔴 把它显示出来是因为"按钮开着但画面没糊"已经出现三次,
+   * 每次都只能靠猜。现在它自己说。
+   */
+  const [blurMode, setBlurMode] = useState<'mask' | 'outline' | 'none'>('none')
   const stateRef = useRef<CheckState>(initState())
   const [out, setOut] = useState<CheckOutput | null>(null)
 
@@ -63,7 +71,10 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     (f: FrameData) => {
       const cam = camCanvasRef.current
       const vid = videoRef.current
-      if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
+      if (blur && cam && vid) {
+        const mode = drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
+        setBlurMode((m) => (m === mode ? m : mode))
+      }
       draw(canvasRef.current, f.landmarks, stateRef.current)
       if (!checker) return
       /**
@@ -211,6 +222,11 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       {status === 'running' && (
         <p className="readout-meta">
           {out?.angle != null && <span>{out.angle}</span>}
+          {blur && (
+            <span className={blurMode === 'none' ? 'warn' : undefined}>
+              blur: {blurMode === 'mask' ? 'cut-out' : blurMode === 'outline' ? 'outline' : 'not working'}
+            </span>
+          )}
           <span>
             {cameras.length} camera{cameras.length === 1 ? '' : 's'} found
             {cameras.length === 1 &&
@@ -247,7 +263,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
             </select>
           )}
           <button className="chip" onClick={() => void refreshCameras()}>
-            Look again
+            Find other cameras
           </button>
         </div>
       )}

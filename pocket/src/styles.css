@@ -244,3 +244,4 @@ button:active { transform: scale(.985); }
 .phoneqr img { border-radius: 6px; flex: 0 0 auto; background: #fff; padding: 4px; }
 .phoneqr-title { margin: 2px 0 4px; font-weight: 650; font-size: 15px; }
 .phoneqr-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.readout-meta .warn { color: var(--warn); font-weight: 650; }

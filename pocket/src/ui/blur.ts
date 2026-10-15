@@ -70,6 +70,8 @@ function getScratch(w: number, h: number, mw: number, mh: number): Scratch {
  * @param maskData MediaPipe 分割蒙版,长度 maskW*maskH,每个值是"这里是人"的概率 0..1
  * 没有蒙版时退化成直接画原帧 —— 宁可不虚化,也不能黑屏。
  */
+export type BlurMode = 'mask' | 'outline' | 'none'
+
 export function drawBlurred(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,
@@ -77,9 +79,9 @@ export function drawBlurred(
   maskW = 0,
   maskH = 0,
   landmarks: Landmark[] = [],
-): void {
+): BlurMode {
   const ctx = canvas.getContext('2d')
-  if (!ctx) return
+  if (!ctx) return 'none'
   const { width: w, height: h } = canvas
 
   // 🔴 蒙版存在但无效时也要兜底。
@@ -93,13 +95,7 @@ export function drawBlurred(
   // 分割蒙版在某些设备/委托组合下拿不到(用户测试里就遇到了:按钮开着但画面没虚化,
   // 因为代码默默退回了画原帧)。宁可边缘粗一点,也不能让这个功能看起来是坏的。
   if (!maskData || maskW === 0 || maskH === 0) {
-    if (landmarks.length > 0) {
-      drawBlurredFromLandmarks(ctx, video, landmarks, w, h)
-      return
-    }
-    ctx.filter = 'none'
-    ctx.drawImage(video, 0, 0, w, h)
-    return
+    return drawBlurredFromLandmarks(ctx, video, landmarks, w, h)
   }
 
   // 1. 背景:模糊的整帧
@@ -111,7 +107,8 @@ export function drawBlurred(
 
   // 2. 蒙版 → alpha 通道
   const mctx = mask.getContext('2d')
-  if (!mctx) return
+  // 走到这里背景已经糊过了,只是没能把人抠出来 —— 算 outline,不算失败
+  if (!mctx) return 'outline'
   const img = mctx.createImageData(maskW, maskH)
   const px = img.data
   for (let i = 0; i < maskData.length; i++) {
@@ -126,7 +123,7 @@ export function drawBlurred(
 
   // 3. 清晰帧 ∩ 蒙版 = 只剩人
   const sctx = sharp.getContext('2d')
-  if (!sctx) return
+  if (!sctx) return 'outline'
   sctx.globalCompositeOperation = 'source-over'
   sctx.clearRect(0, 0, w, h)
   sctx.drawImage(video, 0, 0, w, h)
@@ -138,6 +135,7 @@ export function drawBlurred(
 
   // 4. 人叠回模糊背景上
   ctx.drawImage(sharp, 0, 0)
+  return 'mask'
 }
 
 
@@ -152,12 +150,15 @@ function drawBlurredFromLandmarks(
   lms: Landmark[],
   w: number,
   h: number,
-): void {
+): BlurMode {
   const seen = lms.filter((p) => (p.visibility ?? 0) > 0.4)
   if (seen.length < 4) {
-    ctx.filter = 'none'
+    // 🔴 连关键点都没有时整帧糊掉,而不是画原帧。
+    // 用户开了虚化,看到清晰画面会以为功能坏了 —— 宁可糊过头,也不能看起来没生效。
+    ctx.filter = `blur(${BLUR_PX}px)`
     ctx.drawImage(video, 0, 0, w, h)
-    return
+    ctx.filter = 'none'
+    return 'outline'
   }
 
   // 🔴 这里**不翻** x。虚化画布挂的是 .cam,CSS 上已经有 scaleX(-1),
@@ -187,4 +188,5 @@ function drawBlurredFromLandmarks(
   ctx.clip()
   ctx.drawImage(video, 0, 0, w, h)
   ctx.restore()
+  return 'outline'
 }
