@@ -211,7 +211,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
           {out?.angle != null && <span>{out.angle}</span>}
           <span>
             {cameras.length} camera{cameras.length === 1 ? '' : 's'} found
-            {cameras.length === 1 && ' — connect a phone for a second one'}
+            {cameras.length === 1 &&
+              ' — a phone shows up here once your computer picks it up, which this page cannot do for you'}
           </span>
         </p>
       )}

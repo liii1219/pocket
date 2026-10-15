@@ -164,6 +164,32 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
     rafRef.current = requestAnimationFrame(loop)
   }, [])
 
+  /** 重新枚举摄像头。只有拿到权限之后 label 才非空,所以不能在 start 之前调。 */
+  const refreshCameras = useCallback(async () => {
+    try {
+      setCameras(usableCameras(await navigator.mediaDevices.enumerateDevices()))
+    } catch {
+      /* 枚举失败不影响已经开着的那一路 */
+    }
+  }, [])
+
+  /**
+   * 🔴 监听设备变化。
+   * 列表原来只在开流那一刻枚举一次,所以中途把手机接上(macOS 接力相机)
+   * 不会出现在下拉框里,用户得重开页面才看得到。
+   * 注意:网页只能"发现"系统已经递过来的摄像头,没法主动去连手机 ——
+   * 配对是 macOS 干的,浏览器没有这个 API。
+   */
+  useEffect(() => {
+    const md = navigator.mediaDevices
+    if (!md?.addEventListener) return
+    const onChange = () => {
+      if (streamRef.current) void refreshCameras()
+    }
+    md.addEventListener('devicechange', onChange)
+    return () => md.removeEventListener('devicechange', onChange)
+  }, [refreshCameras])
+
   /** 开(或换)一路摄像头流。deviceId 为 null 表示让浏览器挑默认的前置。 */
   const openStream = useCallback(
     async (deviceId: string | null) => {
@@ -186,20 +212,14 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
       const caps = (track?.getCapabilities?.() ?? {}) as { zoom?: { min: number; max: number } }
       setCanZoom(typeof caps.zoom?.min === 'number' && caps.zoom.max > caps.zoom.min)
 
-      // 只有拿到权限之后 label 才非空,所以枚举放在这里
-      try {
-        const all = await navigator.mediaDevices.enumerateDevices()
-        setCameras(usableCameras(all))
-      } catch {
-        /* 枚举失败不影响已经开着的那一路 */
-      }
+      await refreshCameras()
 
       setStatus('running')
       setMessage(null)
       lastTsRef.current = -1
       if (rafRef.current == null) rafRef.current = requestAnimationFrame(loop)
     },
-    [loop],
+    [loop, refreshCameras],
   )
 
   const pickCamera = useCallback(
