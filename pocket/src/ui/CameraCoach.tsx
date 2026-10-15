@@ -9,9 +9,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Movement } from '../lib/movements'
-import { CHECK_SETUP, CHECK_UNIT, CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
+import { CHECK_SETUP, CHECK_UNIT, CHECKERS, initState, targetRadius, type CheckOutput, type CheckState } from '../lib/pose/checkers'
 import type { Landmark } from '../lib/pose/angles'
-import { LM } from '../lib/pose/angles'
+import { LM, mid } from '../lib/pose/angles'
 import { MovementDiagram } from './MovementDiagram'
 import { usePose, type FrameData } from './usePose'
 import { drawBlurred } from './blur'
@@ -75,7 +75,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
         const mode = drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
         setBlurMode((m) => (m === mode ? m : mode))
       }
-      draw(canvasRef.current, f.landmarks, stateRef.current)
+      draw(canvasRef.current, f.landmarks, stateRef.current, movement.poseCheck)
       if (!checker) return
       /**
        * 🔴 必须把新状态写回 ref。
@@ -292,7 +292,12 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
 }
 
 /** 画骨架和目标圈。只画,不判断。 */
-function draw(canvas: HTMLCanvasElement | null, lms: Landmark[], state?: CheckState) {
+function draw(
+  canvas: HTMLCanvasElement | null,
+  lms: Landmark[],
+  state?: CheckState,
+  checkId?: string,
+) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -300,8 +305,13 @@ function draw(canvas: HTMLCanvasElement | null, lms: Landmark[], state?: CheckSt
   ctx.clearRect(0, 0, w, h)
   if (lms.length === 0) return
 
-  ctx.lineWidth = 4
-  ctx.strokeStyle = 'rgba(120, 220, 190, 0.9)'
+  /**
+   * 🔴 骨架画淡。
+   * 原来线又粗又亮,盖在人身上反而看不清自己在做什么,而且那些线用户也用不上 ——
+   * 真正要看的是"手离圈还有多远"。所以骨架退成背景,触点单独高亮。
+   */
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'rgba(120, 220, 190, 0.35)'
   for (const [a, b] of SKELETON) {
     const pa = lms[a]
     const pb = lms[b]
@@ -314,24 +324,44 @@ function draw(canvas: HTMLCanvasElement | null, lms: Landmark[], state?: CheckSt
     ctx.stroke()
   }
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'
   for (const p of lms) {
     if ((p.visibility ?? 0) < 0.5) continue
     ctx.beginPath()
-    ctx.arc((1 - p.x) * w, p.y * h, 3.5, 0, Math.PI * 2)
+    ctx.arc((1 - p.x) * w, p.y * h, 2.5, 0, Math.PI * 2)
     ctx.fill()
+  }
+
+  // 要用来碰目标的那个点,画大画亮,用户一眼知道该拿什么去碰
+  const usesHead = checkId === 'head-target'
+  const touch = usesHead
+    ? [mid(lms[LM.leftEar], lms[LM.rightEar])]
+    : [lms[LM.leftWrist], lms[LM.rightWrist]]
+  if (state?.targetX != null) {
+    for (const p of touch) {
+      if (!p || Number.isNaN(p.x)) continue
+      const x = (1 - p.x) * w
+      const y = p.y * h
+      ctx.beginPath()
+      ctx.arc(x, y, 13, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)'
+      ctx.fill()
+      ctx.beginPath()
+      ctx.arc(x, y, 7, 0, Math.PI * 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+    }
   }
 
   // 目标圈。和关键点用同一套镜像规则,否则圈和手对不上。
   if (state?.targetX != null && state.targetY != null) {
     const cx = (1 - state.targetX) * w
     const cy = state.targetY * h
-    const r = 0.085 * w
+    const r = targetRadius(checkId ?? '') * w
 
     // 手离得越近圈越实,给一点"快碰到了"的反馈
-    const wrists = [lms[LM.leftWrist], lms[LM.rightWrist]].filter((p) => (p?.visibility ?? 0) > 0.5)
-    const near = wrists.length
-      ? Math.min(...wrists.map((p) => Math.hypot((1 - p.x) * w - cx, p.y * h - cy)))
+    const near = touch.length
+      ? Math.min(...touch.filter(Boolean).map((p) => Math.hypot((1 - p.x) * w - cx, p.y * h - cy)))
       : Infinity
     const close = Math.max(0, Math.min(1, 1 - (near - r) / (r * 2.5)))
 

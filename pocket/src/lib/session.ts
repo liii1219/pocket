@@ -21,6 +21,8 @@ export interface SessionInput {
   quietOnly: boolean
   /** 周围没人。false 时只给看不出来是在运动的动作 */
   alone: boolean
+  /** 最多几个动作。不给就按时间自己定 */
+  maxItems?: number
 }
 
 export interface SessionItem {
@@ -119,6 +121,13 @@ export function composeSession(input: SessionInput): Session {
   const dedupeKey = (m: Movement) =>
     m.pattern === 'mobility' ? `mobility:${m.loads.join(',')}` : m.pattern
 
+  /**
+   * 动作数量上限。
+   * 没指定时按时长估:五分钟三四个就满了,二十分钟给到八个。
+   * 用户可以自己调 —— 同样十分钟,有人想做八个短的,有人想做四个慢的。
+   */
+  const cap = input.maxItems ?? Math.max(3, Math.min(8, Math.round(input.minutes * 0.6)))
+
   const items: SessionItem[] = []
   const usedPatterns = new Set<string>()
   const taken = new Set<string>()
@@ -133,7 +142,7 @@ export function composeSession(input: SessionInput): Session {
 
   // 第一趟:同一个动作模式最多一个,避免一节课全是深蹲
   for (const m of ordered) {
-    if (items.length >= 6) break
+    if (items.length >= cap) break
     if (usedPatterns.has(dedupeKey(m))) continue
     if (spent + m.costSeconds > budget) continue
     add(m)
@@ -145,7 +154,7 @@ export function composeSession(input: SessionInput): Session {
   // 但 Shoulder openers 和 Neck release 根本不是同一件事,它们各管一个部位,不该互相挤掉。
   if (items.length < 3) {
     for (const m of ordered) {
-      if (items.length >= 6) break
+      if (items.length >= cap) break
       if (taken.has(m.id)) continue
       if (spent + m.costSeconds > budget) continue
       add(m)

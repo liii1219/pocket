@@ -372,6 +372,9 @@ export function checkTwist(
 
 export type CheckerId =
   | 'reach-target'
+  | 'reach-high'
+  | 'reach-cross'
+  | 'head-target'
   | 'squat-depth'
   | 'hinge-back'
   | 'shoulder-range'
@@ -470,27 +473,85 @@ export function checkArmRaise(
 /* ------------------------------------------------------ 碰圆圈 */
 
 /**
- * 候选目标位置(关键点坐标系,0..1,未镜像)。
- * 散在躯干四周,够得着但必须伸手 —— 原地不动碰不到任何一个。
+ * 目标玩法的配置。
+ *
+ * 🔴 为什么推广这套:角度阈值判定在实际使用里反复失败 —— 用户做了动作,
+ * 数字不动,又说不清是没做到位还是坏了。碰圆圈不一样:圈就在屏幕上,
+ * 碰到就消失,**用户自己看得见系统有没有在工作**。
+ * 而且只需要一两个关键点,不需要三维、不需要基线、不挑机位。
+ *
+ * 换不同的候选位置,就能逼出不同的动作:
+ * 放头顶 → 上举;放对侧 → 转体;放两边低处 → 侧弯。
  */
-const TARGETS: Array<[number, number]> = [
-  [0.20, 0.30], [0.80, 0.30],
-  [0.13, 0.52], [0.87, 0.52],
-  [0.30, 0.15], [0.70, 0.15],
-  [0.50, 0.12],
-]
+interface TargetSpec {
+  /** 用什么去碰 */
+  track: 'wrists' | 'head'
+  /** 候选位置(关键点坐标系,0..1,未镜像) */
+  spots: Array<[number, number]>
+  /** 碰到的判定半径 */
+  radius: number
+}
 
-/** 碰到的判定半径。太小碰不着,太大站着不动就算碰到了。 */
-const HIT_RADIUS = 0.085
+const TARGET_SPECS = {
+  /** 四周散开:一般性的伸展 */
+  'reach-target': {
+    track: 'wrists',
+    radius: 0.085,
+    spots: [
+      [0.20, 0.30], [0.80, 0.30],
+      [0.13, 0.52], [0.87, 0.52],
+      [0.30, 0.15], [0.70, 0.15],
+      [0.50, 0.12],
+    ],
+  },
+  /** 全在头顶上方:逼出过头上举 */
+  'reach-high': {
+    track: 'wrists',
+    radius: 0.09,
+    spots: [
+      [0.28, 0.10], [0.72, 0.10],
+      [0.40, 0.06], [0.60, 0.06],
+      [0.50, 0.12],
+    ],
+  },
+  /** 全在身体对侧:要够到必须转体 */
+  'reach-cross': {
+    track: 'wrists',
+    radius: 0.09,
+    spots: [
+      [0.08, 0.38], [0.92, 0.38],
+      [0.10, 0.22], [0.90, 0.22],
+      [0.06, 0.55], [0.94, 0.55],
+    ],
+  },
+  /** 用头去碰,放在耳朵外侧:逼出头侧倾 */
+  'head-target': {
+    track: 'head',
+    radius: 0.075,
+    spots: [
+      [0.30, 0.26], [0.70, 0.26],
+      [0.27, 0.32], [0.73, 0.32],
+    ],
+  },
+} as const satisfies Record<string, TargetSpec>
+
+export type TargetCheckId = keyof typeof TARGET_SPECS
 
 const REACH_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftWrist, LM.rightWrist]
+const HEAD_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
 
-/** 离两只手腕都最远的那个候选 —— 保证下一个目标一定要动起来才够得到。 */
-function farthestTarget(lw: Landmark, rw: Landmark): [number, number] {
-  let best = TARGETS[0]
+/** 这个玩法拿哪些点去碰目标。 */
+function touchPoints(lms: Landmark[], track: TargetSpec['track']): Landmark[] {
+  if (track === 'head') return [mid(lms[LM.leftEar], lms[LM.rightEar])]
+  return [lms[LM.leftWrist], lms[LM.rightWrist]]
+}
+
+/** 离所有触点都最远的候选 —— 保证下一个目标一定要动起来才够得到。 */
+function farthestSpot(spec: TargetSpec, pts: Landmark[]): [number, number] {
+  let best = spec.spots[0]
   let bestD = -1
-  for (const [x, y] of TARGETS) {
-    const d = Math.min(Math.hypot(x - lw.x, y - lw.y), Math.hypot(x - rw.x, y - rw.y))
+  for (const [x, y] of spec.spots) {
+    const d = Math.min(...pts.map((p) => Math.hypot(x - p.x, y - p.y)))
     if (d > bestD) {
       bestD = d
       best = [x, y]
@@ -499,52 +560,59 @@ function farthestTarget(lw: Landmark, rw: Landmark): [number, number] {
   return best
 }
 
-/**
- * 碰圆圈:屏幕上出一个圈,手腕碰到就算一次,然后换个位置。
- *
- * 为什么可靠:
- * - 只用腕关节,是 MediaPipe 最稳的几个点之一
- * - 全在画面坐标里算,不需要三维、不需要基线、不挑机位
- * - 用户看得见圈,碰到就消失 —— 不存在"不知道它有没有在工作"
- */
-export function checkReach(lms: Landmark[], state: CheckState, t: number): CheckOutput {
-  if (!visibleEnough(lms, REACH_IDX)) {
-    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, REACH_IDX) }
+/** 按配置造一个碰目标的判定器。 */
+function makeTargetChecker(id: TargetCheckId): PoseChecker {
+  const spec = TARGET_SPECS[id] as TargetSpec
+  const idx = spec.track === 'head' ? HEAD_IDX : REACH_IDX
+
+  return (lms, state, t) => {
+    if (!visibleEnough(lms, idx)) {
+      return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, idx) }
+    }
+    const pts = touchPoints(lms, spec.track)
+    const s = { ...state }
+
+    if (s.targetX == null || s.targetY == null) {
+      const [x, y] = farthestSpot(spec, pts)
+      s.targetX = x
+      s.targetY = y
+      s.downStartT = t
+      const how = spec.track === 'head' ? 'your head' : 'either hand'
+      return { ...s, confident: true, cue: `Touch the circle with ${how}.`, angle: null, counted: false }
+    }
+
+    const nearest = Math.min(...pts.map((p) => Math.hypot(p.x - s.targetX!, p.y - s.targetY!)))
+
+    if (nearest <= spec.radius) {
+      s.reps += 1
+      s.lastRepMs = s.downStartT > 0 ? t - s.downStartT : 0
+      const [x, y] = farthestSpot(spec, pts)
+      s.targetX = x
+      s.targetY = y
+      s.downStartT = t
+      return { ...s, confident: true, cue: null, angle: null, counted: true }
+    }
+
+    const pct = Math.round(Math.max(0, 1 - (nearest - spec.radius) / 0.5) * 100)
+    return { ...s, confident: true, cue: null, angle: pct, counted: false }
   }
-  const lw = lms[LM.leftWrist]
-  const rw = lms[LM.rightWrist]
-  const s = { ...state }
-
-  if (s.targetX == null || s.targetY == null) {
-    const [x, y] = farthestTarget(lw, rw)
-    s.targetX = x
-    s.targetY = y
-    s.downStartT = t
-    return { ...s, confident: true, cue: 'Touch the circle with either hand.', angle: null, counted: false }
-  }
-
-  const dl = Math.hypot(lw.x - s.targetX, lw.y - s.targetY)
-  const dr = Math.hypot(rw.x - s.targetX, rw.y - s.targetY)
-  const nearest = Math.min(dl, dr)
-
-  if (nearest <= HIT_RADIUS) {
-    s.reps += 1
-    s.lastRepMs = s.downStartT > 0 ? t - s.downStartT : 0
-    const [x, y] = farthestTarget(lw, rw)
-    s.targetX = x
-    s.targetY = y
-    s.downStartT = t
-    return { ...s, confident: true, cue: null, angle: null, counted: true }
-  }
-
-  // 距离换算成百分比给读数用:100 = 碰到了
-  const pct = Math.round(Math.max(0, 1 - (nearest - HIT_RADIUS) / 0.5) * 100)
-  return { ...s, confident: true, cue: null, angle: pct, counted: false }
 }
 
-/** 读数那个数字是什么。不写的话用户只看到一个跳动的数,不知道在量什么。 */
+export const checkReach = makeTargetChecker('reach-target')
+export const checkReachHigh = makeTargetChecker('reach-high')
+export const checkReachCross = makeTargetChecker('reach-cross')
+export const checkHeadTarget = makeTargetChecker('head-target')
+
+/** 画圈的时候要知道半径。 */
+export function targetRadius(id: string): number {
+  return (TARGET_SPECS as Record<string, TargetSpec>)[id]?.radius ?? 0.085
+}
+
 export const CHECK_UNIT: Record<CheckerId, string> = {
   'reach-target': '% to the circle',
+  'reach-high': '% to the circle',
+  'reach-cross': '% to the circle',
+  'head-target': '% to the circle',
   'squat-depth': '° knee',
   'hinge-back': '° hip',
   'shoulder-range': '° arm',
@@ -557,6 +625,9 @@ export const CHECK_UNIT: Record<CheckerId, string> = {
 
 export const CHECK_SETUP: Record<CheckerId, string> = {
   'reach-target': 'Sit or stand so your head and both hands are in the picture. Any angle is fine.',
+  'reach-high': 'Leave room above your head in the picture. Any angle is fine.',
+  'reach-cross': 'Sit or stand with your head and both hands in the picture. Any angle is fine.',
+  'head-target': 'Head and shoulders in the picture. You touch these with your head, not your hands.',
   'squat-depth':
     'Stand side-on to the camera, far enough back that your feet are in the picture.',
   'hinge-back':
@@ -572,6 +643,9 @@ export const CHECK_SETUP: Record<CheckerId, string> = {
 
 export const CHECKERS: Record<CheckerId, PoseChecker> = {
   'reach-target': checkReach,
+  'reach-high': checkReachHigh,
+  'reach-cross': checkReachCross,
+  'head-target': checkHeadTarget,
   'squat-depth': checkSquat,
   'hinge-back': checkHinge,
   'shoulder-range': checkShoulder,

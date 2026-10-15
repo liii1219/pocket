@@ -147,4 +147,23 @@ describe('composeSession', () => {
     const s = composeSession({ ...base, minutes: 10, alone: true })
     expect(s.items.some((i) => i.movement.visibility === 'obvious')).toBe(true)
   })
+
+  /* --- 动作数量 ----------------------------------------------------- */
+
+  it('不指定数量时按时长估:时间越长动作越多', () => {
+    const five = composeSession({ ...base, minutes: 5 }).items.length
+    const twenty = composeSession({ ...base, minutes: 20 }).items.length
+    expect(twenty).toBeGreaterThan(five)
+  })
+
+  it('指定数量时就按指定的来', () => {
+    const s = composeSession({ ...base, minutes: 20, maxItems: 3 })
+    expect(s.items).toHaveLength(3)
+  })
+
+  it('指定的数量超过时间预算时,按预算截断,不硬凑', () => {
+    const s = composeSession({ ...base, minutes: 5, maxItems: 8 })
+    const spent = s.items.reduce((n, i) => n + i.movement.costSeconds, 0)
+    expect(spent).toBeLessThanOrEqual(5 * 60 - 60)
+  })
 })

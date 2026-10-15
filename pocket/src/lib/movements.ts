@@ -13,6 +13,9 @@ export type BodyArea = 'neck' | 'shoulder' | 'back' | 'hip' | 'knee' | 'ankle' |
 export type Pattern = 'squat' | 'hinge' | 'push' | 'pull' | 'mobility' | 'carry'
 export type PoseCheckId =
   | 'reach-target'
+  | 'reach-high'
+  | 'reach-cross'
+  | 'head-target'
   | 'squat-depth'
   | 'hinge-back'
   | 'shoulder-range'
@@ -136,7 +139,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'discreet',
     seconds: 40,
     costSeconds: 55,
-    poseCheck: 'shoulder-range',
+    poseCheck: 'reach-high',
     stopIf: 'Stop if it pinches at the top.',
   },
   {
@@ -152,7 +155,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'discreet',
     seconds: 40,
     costSeconds: 50,
-    poseCheck: 'neck-tilt',
+    poseCheck: 'head-target',
     stopIf: 'Stop if anything shoots down your arm.',
   },
   {
@@ -228,7 +231,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'discreet',
     seconds: 40,
     costSeconds: 45,
-    poseCheck: 'torso-twist',
+    poseCheck: 'reach-cross',
     stopIf: 'Stop if it pinches in the lower back rather than stretching.',
   },
   {

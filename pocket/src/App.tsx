@@ -20,8 +20,16 @@ type Screen = 'time' | 'session' | 'coach'
 
 const AREAS: BodyArea[] = ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', 'wrist']
 
-/** 受访者说工作日五到十分钟才现实,更长的被描述为不现实。所以只有这两个。 */
-const CHOICES = [5, 10] as const
+/**
+ * 时长选项。
+ * 受访者说工作日五到十分钟最现实,所以默认停在 10 ——
+ * 但人在家、或者正好有一段长空档时也该让他用得上,所以放到 20。
+ */
+const CHOICES = [5, 10, 15, 20] as const
+
+/** 动作数量。'auto' 表示按时长自己定。 */
+const COUNTS = ['auto', 3, 5, 8] as const
+type CountChoice = (typeof COUNTS)[number]
 
 const THEME_KEY = 'pocket.theme.v1'
 type Theme = 'light' | 'dark'
@@ -64,11 +72,16 @@ export default function App() {
    * 后一种便宜得多。
    */
   const [alone, setAlone] = useState(false)
+  const [count, setCount] = useState<CountChoice>('auto')
   const [theme, toggleTheme] = useTheme()
 
   const session = useMemo(
-    () => composeSession({ minutes, place, sore, energy, quietOnly: place !== 'gym', alone }),
-    [minutes, place, sore, energy, alone],
+    () =>
+      composeSession({
+        minutes, place, sore, energy, quietOnly: place !== 'gym', alone,
+        maxItems: count === 'auto' ? undefined : count,
+      }),
+    [minutes, place, sore, energy, alone, count],
   )
 
   /* ------------------------------------------------------------ screens */
@@ -166,20 +179,32 @@ export default function App() {
 
       <ul className="gaps">
         {CHOICES.map((m) => {
-          const count = composeSession({
+          const n = composeSession({
             minutes: m, place, sore, energy, quietOnly: place !== 'gym', alone,
+            maxItems: count === 'auto' ? undefined : count,
           }).items.length
           return (
             <li key={m}>
               <button onClick={() => { setMinutes(m); setScreen('session') }}>
                 <span className="time">{m} minutes</span>
-                <span className="len">{count} movements</span>
+                <span className="len">{n} movements</span>
                 <span className="ctx" />
               </button>
             </li>
           )
         })}
       </ul>
+
+      <div className="alone">
+        <p className="label">How many movements?</p>
+        <div className="chips">
+          {COUNTS.map((c) => (
+            <button key={c} className={count === c ? 'chip on' : 'chip'} onClick={() => setCount(c)}>
+              {c === 'auto' ? 'Let it decide' : c}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="alone">
         <p className="label">Anyone around?</p>

@@ -111,3 +111,60 @@ d2('蒙版有效性', () => {
     e2(usable(m)).toBe(true)
   })
 })
+
+/* 推广出来的三个目标玩法 */
+import { describe as d3, it as i3, expect as e3 } from 'vitest'
+import { checkHeadTarget, checkReachCross, checkReachHigh, targetRadius } from './checkers'
+
+/** 头在指定位置的骨架(耳朵中点即为触点)。 */
+function withHead(hx: number, hy: number): Landmark[] {
+  const lms = withWrists(0.4, 0.75, 0.6, 0.75)
+  lms[LM.leftEar] = { x: hx - 0.04, y: hy, z: 0, visibility: 0.95 }
+  lms[LM.rightEar] = { x: hx + 0.04, y: hy, z: 0, visibility: 0.95 }
+  return lms
+}
+
+d3('目标玩法的位置分布', () => {
+  i3('reach-high 的目标全在头顶上方', () => {
+    // 连碰十次,看看给出来的位置是不是都很高
+    let s = checkReachHigh(resting(), initState(), 0)
+    const ys: number[] = []
+    for (let i = 0; i < 10; i++) {
+      ys.push(s.targetY!)
+      s = checkReachHigh(withWrists(s.targetX!, s.targetY!, 0.6, 0.75), s, (i + 1) * 1000)
+      s = checkReachHigh(resting(), s, (i + 1) * 1000 + 50)
+    }
+    e3(Math.max(...ys)).toBeLessThan(0.2)
+  })
+
+  i3('reach-cross 的目标全在身体两侧远端', () => {
+    let s = checkReachCross(resting(), initState(), 0)
+    const xs: number[] = []
+    for (let i = 0; i < 10; i++) {
+      xs.push(s.targetX!)
+      s = checkReachCross(withWrists(s.targetX!, s.targetY!, 0.6, 0.75), s, (i + 1) * 1000)
+      s = checkReachCross(resting(), s, (i + 1) * 1000 + 50)
+    }
+    // 每个都远离中线
+    e3(xs.every((x) => x < 0.15 || x > 0.85)).toBe(true)
+  })
+})
+
+d3('用头碰目标', () => {
+  i3('手碰到不算,必须用头', () => {
+    const s = checkHeadTarget(withHead(0.5, 0.3), initState(), 0)
+    // 把手放到目标上
+    const lms = withHead(0.5, 0.3)
+    lms[LM.leftWrist] = { x: s.targetX!, y: s.targetY!, z: 0, visibility: 0.95 }
+    e3(checkHeadTarget(lms, s, 1000).reps).toBe(0)
+  })
+
+  i3('头碰到就算', () => {
+    const s = checkHeadTarget(withHead(0.5, 0.3), initState(), 0)
+    e3(checkHeadTarget(withHead(s.targetX!, s.targetY!), s, 1000).reps).toBe(1)
+  })
+
+  i3('头的判定圈比手的小', () => {
+    e3(targetRadius('head-target')).toBeLessThan(targetRadius('reach-target'))
+  })
+})
