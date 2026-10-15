@@ -27,9 +27,14 @@ const CYCLE_MS = 2800
 /** 一节肢体:在 group 原点起,沿 -Y 伸出 len。旋转 group 就是绕这个关节转。 */
 function limb(len: number, radius: number, mat: THREE.Material) {
   const g = new THREE.Group()
-  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(radius, len - radius * 2, 4, 10), mat)
+  const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(radius, len - radius * 2, 6, 14), mat)
   mesh.position.y = -len / 2
+  mesh.castShadow = true
   g.add(mesh)
+  // 关节球:盖住胶囊端面的接缝,不然每个关节看着像断开的两截
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.12, 14, 12), mat)
+  ball.castShadow = true
+  g.add(ball)
   return g
 }
 
@@ -45,51 +50,77 @@ interface Parts {
 }
 
 function buildFigure(colour: number): { group: THREE.Group; parts: Parts } {
-  const mat = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.55, metalness: 0.05 })
+  const mat = new THREE.MeshStandardMaterial({
+    color: colour,
+    roughness: 0.42,
+    metalness: 0.12,
+  })
 
   const root = new THREE.Group()
 
-  // 躯干:从骨盆往上
+  // 躯干:上宽下窄,胸腔一段 + 骨盆一段,比单根胶囊像人
   const spine = new THREE.Group()
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.4, 4, 12), mat)
-  torso.position.y = 0.34
-  spine.add(torso)
+  const chest = new THREE.Mesh(new THREE.CapsuleGeometry(0.165, 0.24, 6, 16), mat)
+  chest.position.y = 0.46
+  chest.castShadow = true
+  spine.add(chest)
+  const waist = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.16, 6, 16), mat)
+  waist.position.y = 0.2
+  waist.castShadow = true
+  spine.add(waist)
+  const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.145, 16, 12), mat)
+  pelvis.scale.set(1, 0.7, 0.85)
+  pelvis.castShadow = true
+  spine.add(pelvis)
   root.add(spine)
 
   const head = new THREE.Group()
-  head.position.y = 0.74
-  // 脖子,让头和躯干分开
-  const neck = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.08, 4, 8), mat)
-  neck.position.y = -0.1
+  head.position.y = 0.66
+  const neck = new THREE.Mesh(new THREE.CapsuleGeometry(0.052, 0.07, 5, 10), mat)
+  neck.position.y = 0.04
+  neck.castShadow = true
   head.add(neck)
-  head.add(new THREE.Mesh(new THREE.SphereGeometry(0.135, 18, 14), mat))
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 16), mat)
+  skull.position.y = 0.2
+  skull.scale.set(0.92, 1.08, 1)
+  skull.castShadow = true
+  head.add(skull)
   spine.add(head)
 
   const mk = (parent: THREE.Group, x: number, y: number, len: number, r: number) => {
     const j = new THREE.Group()
     j.position.set(x, y, 0)
-    const l = limb(len, r, mat)
-    j.add(l)
+    j.add(limb(len, r, mat))
     parent.add(j)
     return j
   }
 
-  // 手臂挂在肩高
-  const shoulderL = mk(spine, 0.2, 0.55, 0.3, 0.055)
-  const shoulderR = mk(spine, -0.2, 0.55, 0.3, 0.055)
-  const elbowL = mk(shoulderL, 0, -0.3, 0.28, 0.048)
-  const elbowR = mk(shoulderR, 0, -0.3, 0.28, 0.048)
+  const shoulderL = mk(spine, 0.185, 0.56, 0.3, 0.056)
+  const shoulderR = mk(spine, -0.185, 0.56, 0.3, 0.056)
+  const elbowL = mk(shoulderL, 0, -0.3, 0.27, 0.047)
+  const elbowR = mk(shoulderR, 0, -0.3, 0.27, 0.047)
 
-  // 腿挂在骨盆
-  const hipL = mk(root, 0.1, 0, 0.42, 0.07)
-  const hipR = mk(root, -0.1, 0, 0.42, 0.07)
+  // 手
+  const hand = (parent: THREE.Group) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.052, 12, 10), mat)
+    m.position.y = -0.27
+    m.scale.set(0.8, 1.1, 0.6)
+    m.castShadow = true
+    parent.add(m)
+  }
+  hand(elbowL)
+  hand(elbowR)
+
+  const hipL = mk(root, 0.095, -0.03, 0.42, 0.072)
+  const hipR = mk(root, -0.095, -0.03, 0.42, 0.072)
   const kneeL = mk(hipL, 0, -0.42, 0.4, 0.06)
   const kneeR = mk(hipR, 0, -0.42, 0.4, 0.06)
 
   const foot = () => {
     const g = new THREE.Group()
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.2), mat)
-    m.position.set(0, -0.02, 0.06)
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.21), mat)
+    m.position.set(0, -0.022, 0.062)
+    m.castShadow = true
     g.add(m)
     return g
   }
@@ -140,13 +171,16 @@ export function Figure3D({ movementId }: { movementId: string }) {
     if (!host || !frames) return
 
     const w = host.clientWidth || 300
-    const h = 230
+    const h = 290
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 100)
-    // 斜 40° 侧前方:髋铰链和屈膝的区别在这个角度最明显,正面会被压扁
-    camera.position.set(1.55, 0.25, 1.85)
-    camera.lookAt(0, -0.02, 0)
+    const camera = new THREE.PerspectiveCamera(32, w / h, 0.1, 100)
+    // 斜 40° 侧前方:髋铰链和屈膝的区别在这个角度最明显,正面会被压扁。
+    // 距离按**最高的那一帧**定,不是站姿。举过头顶时从脚底 -0.86 到指尖 +1.16,
+    // 约 2.0 单位。竖直可视高度 = 2·d·tan(fov/2),要装下 2.0 再留边,d 取 3.9。
+    // 按站姿 1.8 算的话,肩部动作一抬手就会切掉头顶 —— 之前就是这么切的。
+    camera.position.set(2.70, 0.46, 3.21)
+    camera.lookAt(0, 0.10, 0)
 
     let renderer: THREE.WebGLRenderer
     try {
@@ -156,16 +190,48 @@ export function Figure3D({ movementId }: { movementId: string }) {
     }
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
     renderer.setSize(w, h)
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    // 让亮部不要死白,暗部不要死黑
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
     host.appendChild(renderer.domElement)
 
     // 取当前主题的强调色,明暗切换时小人跟着变
     const css = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
     const colour = new THREE.Color(css || '#1f8f6b').getHex()
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 2.1))
-    const key = new THREE.DirectionalLight(0xffffff, 1.5)
-    key.position.set(2, 3, 2)
+    // 三灯:天光给整体基调,主灯给体积和投影,轮廓光把人从背景里剥出来
+    const dark = document.documentElement.dataset.theme === 'dark'
+    scene.add(new THREE.HemisphereLight(0xffffff, dark ? 0x202830 : 0xd8dee6, dark ? 1.4 : 1.9))
+
+    const key = new THREE.DirectionalLight(0xffffff, dark ? 2.0 : 2.4)
+    key.position.set(2.4, 3.6, 2.2)
+    key.castShadow = true
+    key.shadow.mapSize.set(1024, 1024)
+    key.shadow.camera.near = 0.5
+    key.shadow.camera.far = 10
+    const d = 1.6
+    key.shadow.camera.left = -d
+    key.shadow.camera.right = d
+    key.shadow.camera.top = d
+    key.shadow.camera.bottom = -d
+    key.shadow.bias = -0.0015
     scene.add(key)
+
+    const rim = new THREE.DirectionalLight(0xffffff, dark ? 1.1 : 0.7)
+    rim.position.set(-2.2, 1.4, -1.8)
+    scene.add(rim)
+
+    // 只接阴影的地面:给小人一个"站在什么上面"的落点,不画出实际的面
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(1.5, 48),
+      new THREE.ShadowMaterial({ opacity: dark ? 0.32 : 0.16 }),
+    )
+    floor.rotation.x = -Math.PI / 2
+    floor.position.y = -0.86
+    floor.receiveShadow = true
+    scene.add(floor)
 
     const pivot = new THREE.Group()
     const { group, parts } = buildFigure(colour)
