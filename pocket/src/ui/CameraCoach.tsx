@@ -172,6 +172,16 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       </div>
 
       {status === 'running' && (
+        <p className="readout-meta">
+          {out?.angle != null && <span>{out.angle}</span>}
+          <span>
+            {cameras.length} camera{cameras.length === 1 ? '' : 's'} found
+            {cameras.length === 1 && ' — connect a phone for a second one'}
+          </span>
+        </p>
+      )}
+
+      {status === 'running' && (
         <div className="camctl">
           <button className={blur ? 'chip on' : 'chip'} onClick={() => setBlur((b) => !b)}>
             Blur background

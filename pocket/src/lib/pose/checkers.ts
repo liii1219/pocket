@@ -26,6 +26,17 @@ export interface CheckState {
   lastRepMs: number
   /** 这一组里出现过的问题,用于避免同一句话反复说 */
   flags: string[]
+  /**
+   * 静息基线。null = 还没量出来。
+   *
+   * 🔴 为什么需要:扭转/侧倾/耸肩这类"从中立位出发"的动作,绝对阈值靠不住 ——
+   * 人坐着放松时肩膀本来就不完全对称,静息扭转角可能就有十几度,
+   * 写死"回到 10 度以下才算复位"的话,一次都数不出来(用户测试里就是这样)。
+   * 所以开头先量几帧静息值,之后一律按"相对基线偏离了多少"来判。
+   */
+  baseline: number | null
+  /** 已采样的基线帧数 */
+  baseSamples: number
 }
 
 export interface CheckOutput extends CheckState {
@@ -39,7 +50,37 @@ export interface CheckOutput extends CheckState {
 }
 
 export function initState(): CheckState {
-  return { reps: 0, phase: 'up', minAngle: 180, downStartT: 0, lastRepMs: 0, flags: [] }
+  return {
+    reps: 0, phase: 'up', minAngle: 180, downStartT: 0, lastRepMs: 0, flags: [],
+    baseline: null, baseSamples: 0,
+  }
+}
+
+/** 基线采样帧数。30fps 下约 0.8 秒,够用户坐稳,又不会让人等。 */
+const BASE_FRAMES = 25
+
+/**
+ * 相对基线的判定:先采样静息值,再把"偏离基线多少"喂给状态机。
+ * @param value 当前测量值(扭转角/侧倾角/耸肩比值×100)
+ * @param rising true 表示做动作时该值**变大**(扭转、侧倾),false 表示变小(耸肩)
+ * @returns null 表示还在采样基线,调用方应提示用户保持不动
+ */
+function deviation(s: CheckState, value: number, rising: boolean): number | null {
+  if (s.baseSamples < BASE_FRAMES) {
+    // 取平均而不是第一帧:第一帧可能正好抖了一下
+    s.baseline = s.baseline == null ? value : s.baseline + (value - s.baseline) / (s.baseSamples + 1)
+    s.baseSamples += 1
+    return null
+  }
+  const d = rising ? value - (s.baseline ?? 0) : (s.baseline ?? 0) - value
+  // 状态机吃的是"越小越到位",所以回传 180 - 偏离量
+  return 180 - Math.max(0, d)
+}
+
+const CALIBRATING = {
+  confident: false as const,
+  cue: 'Hold still for a moment while I learn your resting position.',
+  counted: false as const,
 }
 
 /** 迟滞阈值:进下位和回上位用不同门槛,避免在临界点反复跳数。 */
@@ -259,7 +300,8 @@ export function checkElbow(
  * 🔴 倾角是**越大越好**,和深蹲相反,所以喂给状态机的是 180 - tilt。
  */
 const NECK_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
-const NECK_TH: Thresholds = { down: 165, up: 173, depth: 158, minMs: 1500 }
+/** 相对基线:偏离 15 度算歪过去了,回到 7 度以内算复位,20 度以上才算"歪够了"。 */
+const NECK_TH: Thresholds = { down: 165, up: 173, depth: 160, minMs: 1500 }
 
 export function checkNeckTilt(
   lms: Landmark[],
@@ -273,9 +315,11 @@ export function checkNeckTilt(
   if (!world) return { ...state, ...NOT_VISIBLE }
   const tilt = headTiltDeg(world)
   if (Number.isNaN(tilt)) return { ...state, ...NOT_VISIBLE }
-  const inverted = 180 - tilt
 
   const s = { ...state }
+  const inverted = deviation(s, tilt, true)
+  if (inverted == null) return { ...s, ...CALIBRATING, angle: Math.round(tilt) }
+
   const { counted, repMinAngle } = advance(s, inverted, t, NECK_TH)
   const cue = counted
     ? pickCue(s, repMinAngle, NECK_TH, 'Let the ear travel further towards the shoulder.', 'Ease into it, do not snap.')
@@ -288,7 +332,8 @@ export function checkNeckTilt(
  * 需要 world 坐标:判的是肩膀连线在水平面上转了多少,画面坐标算不出来。
  */
 const TWIST_IDX = [LM.leftShoulder, LM.rightShoulder]
-const TWIST_TH: Thresholds = { down: 155, up: 170, depth: 145, minMs: 1500 }
+/** 相对基线:偏离 22 度算转过去了,回到 8 度以内算复位,25 度以上才算"转够了"。 */
+const TWIST_TH: Thresholds = { down: 158, up: 172, depth: 155, minMs: 1500 }
 
 export function checkTwist(
   lms: Landmark[],
@@ -304,9 +349,11 @@ export function checkTwist(
   }
   const twist = torsoTwistDeg(world)
   if (Number.isNaN(twist)) return { ...state, ...NOT_VISIBLE }
-  const inverted = 180 - twist
 
   const s = { ...state }
+  const inverted = deviation(s, twist, true)
+  if (inverted == null) return { ...s, ...CALIBRATING, angle: Math.round(twist) }
+
   const { counted, repMinAngle } = advance(s, inverted, t, TWIST_TH)
   const cue = counted
     ? pickCue(s, repMinAngle, TWIST_TH, 'Turn a little further through the ribs.', 'Slower, and keep sitting tall.')
@@ -352,8 +399,8 @@ export type PoseChecker = (
  * 放松约 0.75,耸到底约 0.55 —— 越小越到位,直接喂状态机。
  */
 const SHRUG_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
-/** 阈值放大 100 倍,因为状态机吃的是"角度"量级的数 */
-const SHRUG_TH: Thresholds = { down: 68, up: 73, depth: 62, minMs: 1200 }
+/** 相对基线。比值×100 放松约 75,耸到底约 55,所以偏离 8 算抬起、3 以内算放下。 */
+const SHRUG_TH: Thresholds = { down: 172, up: 177, depth: 168, minMs: 1200 }
 
 export function checkShrug(
   lms: Landmark[],
@@ -370,7 +417,10 @@ export function checkShrug(
   const scaled = ratio * 100
 
   const s = { ...state }
-  const { counted, repMinAngle } = advance(s, scaled, t, SHRUG_TH)
+  const inverted = deviation(s, scaled, false)
+  if (inverted == null) return { ...s, ...CALIBRATING, angle: Math.round(scaled) }
+
+  const { counted, repMinAngle } = advance(s, inverted, t, SHRUG_TH)
   const cue = counted
     ? pickCue(s, repMinAngle, SHRUG_TH, 'Lift the shoulders higher, right up to the ears.', 'Let them drop slowly.')
     : null

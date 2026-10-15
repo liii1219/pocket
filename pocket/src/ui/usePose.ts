@@ -27,6 +27,8 @@ export interface CamOption {
 const UNUSABLE = /desk view|桌上視角|桌上视角|screen|display/i
 
 export function usableCameras(all: MediaDeviceInfo[]): CamOption[] {
+  // 🔴 按 deviceId 去重,不按 label。macOS 会给不同的物理设备同一个名字,
+  // 按名字去重会把真正能用的那一路也吃掉,下拉框就只剩一个、于是整个不显示。
   const seen = new Set<string>()
   const out: CamOption[] = []
   all
@@ -34,8 +36,8 @@ export function usableCameras(all: MediaDeviceInfo[]): CamOption[] {
     .forEach((d, i) => {
       const label = d.label || `Camera ${i + 1}`
       if (UNUSABLE.test(label)) return
-      if (seen.has(label)) return
-      seen.add(label)
+      if (seen.has(d.deviceId)) return
+      seen.add(d.deviceId)
       out.push({ deviceId: d.deviceId, label })
     })
   // 全被滤掉了说明规则太狠,退回原始列表 —— 宁可多几个,也不能一个都不给

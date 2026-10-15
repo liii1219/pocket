@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkArmRaise, checkElbow, checkNeckTilt, checkShrug, checkTwist, initState } from './checkers'
+import { checkArmRaise, checkElbow, checkNeckTilt, checkShrug, checkTwist, initState, type CheckOutput, type CheckState } from './checkers'
 import { armRaiseDeg, headTiltDeg, shrugRatio, torsoTwistDeg, LM, type Landmark } from './angles'
 
 /** 造一副只有上半身的骨架。角度单位是度。 */
@@ -66,6 +66,20 @@ function upper(
 
 const clock = () => { let t = 0; return () => (t += 1800) }
 
+/**
+ * 喂够基线采样帧。
+ * 扭转/侧倾/耸肩现在都先量静息值再判,不先热身的话状态机还没开始工作。
+ */
+function calibrate(
+  fn: (l: Landmark[], s: CheckState, t: number, w?: Landmark[]) => CheckOutput,
+  neutral: Landmark[],
+  tick: () => number,
+): CheckState {
+  let s = initState()
+  for (let i = 0; i < 30; i++) s = fn(neutral, s, tick(), neutral)
+  return s
+}
+
 describe('headTiltDeg', () => {
   it('不歪头约等于 0', () => expect(headTiltDeg(upper({ tilt: 0 }))).toBeLessThan(3))
   it('歪 25 度能测出来', () => expect(headTiltDeg(upper({ tilt: 25 }))).toBeGreaterThan(20))
@@ -82,19 +96,19 @@ describe('torsoTwistDeg', () => {
 describe('checkNeckTilt', () => {
   it('歪过去再回正数一次', () => {
     const t = clock()
-    let s = initState()
-    { const w = upper({ tilt: 0 }); s = checkNeckTilt(w, s, t(), w) }
+    const neutral = upper({ tilt: 0 })
+    let s = calibrate(checkNeckTilt, neutral, t)
     { const w = upper({ tilt: 28 }); s = checkNeckTilt(w, s, t(), w) }
-    const w2 = upper({ tilt: 2 }); const out = checkNeckTilt(w2, s, t(), w2)
+    const out = checkNeckTilt(neutral, s, t(), neutral)
     expect(out.reps).toBe(1)
     expect(out.confident).toBe(true)
   })
   it('幅度不够会提示再远一点', () => {
     const t = clock()
-    let s = initState()
-    { const w = upper({ tilt: 0 }); s = checkNeckTilt(w, s, t(), w) }
+    const neutral = upper({ tilt: 0 })
+    let s = calibrate(checkNeckTilt, neutral, t)
     { const w = upper({ tilt: 17 }); s = checkNeckTilt(w, s, t(), w) }
-    const w2 = upper({ tilt: 2 }); const out = checkNeckTilt(w2, s, t(), w2)
+    const out = checkNeckTilt(neutral, s, t(), neutral)
     expect(out.reps).toBe(1)
     expect(out.cue).toMatch(/further/)
   })
@@ -103,16 +117,17 @@ describe('checkNeckTilt', () => {
     for (const i of [LM.leftHip, LM.rightHip, LM.leftKnee, LM.rightKnee, LM.leftAnkle, LM.rightAnkle]) {
       lms[i] = { x: 0.5, y: 1.5, z: 0, visibility: 0 }
     }
-    expect(checkNeckTilt(lms, initState(), 0, lms).confident).toBe(true)
+    const t = clock()
+    const s = calibrate(checkNeckTilt, upper({ tilt: 0 }), t)
+    expect(checkNeckTilt(lms, s, t(), lms).confident).toBe(true)
   })
 })
 
 describe('checkTwist', () => {
   it('转过去再回正数一次', () => {
     const t = clock()
-    let s = initState()
     const w0 = upper({ twist: 0 }); const w40 = upper({ twist: 40 })
-    s = checkTwist(w0, s, t(), w0)
+    let s = calibrate(checkTwist, w0, t)
     s = checkTwist(w40, s, t(), w40)
     const out = checkTwist(w0, s, t(), w0)
     expect(out.reps).toBe(1)
@@ -198,10 +213,9 @@ describe('旋转不变性', () => {
 describe('checkShrug', () => {
   it('耸起来再放下数一次', () => {
     const t = clock()
-    let s = initState()
     const relaxed = upper({ shrug: 0.75 })
     const up = upper({ shrug: 0.55 })
-    s = checkShrug(relaxed, s, t(), relaxed)
+    let s = calibrate(checkShrug, relaxed, t)
     s = checkShrug(up, s, t(), up)
     const out = checkShrug(relaxed, s, t(), relaxed)
     expect(out.reps).toBe(1)
@@ -209,10 +223,9 @@ describe('checkShrug', () => {
   })
   it('耸得不够提示抬高一点', () => {
     const t = clock()
-    let s = initState()
     const relaxed = upper({ shrug: 0.75 })
-    const half = upper({ shrug: 0.66 })
-    s = checkShrug(relaxed, s, t(), relaxed)
+    const half = upper({ shrug: 0.655 })
+    let s = calibrate(checkShrug, relaxed, t)
     s = checkShrug(half, s, t(), half)
     const out = checkShrug(relaxed, s, t(), relaxed)
     expect(out.cue).toMatch(/higher/)
@@ -234,5 +247,29 @@ describe('checkArmRaise', () => {
     const out = checkArmRaise(upper({ raise: 20 }), initState(), 0)
     expect(out.confident).toBe(false)
     expect(out.reps).toBe(0)
+  })
+})
+
+
+describe('基线校准', () => {
+  it('采样期间不自信,也不数次数', () => {
+    const t = clock()
+    const neutral = upper({ twist: 0 })
+    const out = checkTwist(neutral, initState(), t(), neutral)
+    expect(out.confident).toBe(false)
+    expect(out.reps).toBe(0)
+    expect(out.cue).toMatch(/Hold still/)
+  })
+
+  it('静息时本来就歪着,也能正常计数', () => {
+    // 回归:人坐着放松时肩膀本就不对称。写死绝对阈值的话,
+    // 静息扭转角十几度就永远回不到"复位",一次都数不出来。
+    const t = clock()
+    const resting = upper({ twist: 14 })   // 这个人天生就侧着一点
+    let s = calibrate(checkTwist, resting, t)
+    const turned = upper({ twist: 42 })
+    s = checkTwist(turned, s, t(), turned)
+    const out = checkTwist(resting, s, t(), resting)
+    expect(out.reps).toBe(1)
   })
 })
