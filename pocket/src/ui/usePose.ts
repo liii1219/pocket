@@ -71,6 +71,11 @@ interface UsePoseResult {
   widen: () => Promise<void>
   /** 手动重新枚举。接力相机刚连上时 devicechange 偶尔不触发,给个手动出口 */
   refreshCameras: () => Promise<void>
+  /**
+   * 系统一共报了几个视频输入(滤之前)。
+   * 用来回答"是系统没给,还是我们滤掉了" —— 没有这个数只能猜。
+   */
+  rawCameraCount: number
 }
 
 const WASM_PATH = `${import.meta.env.BASE_URL}mediapipe/wasm`
@@ -108,6 +113,7 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
   const [cameras, setCameras] = useState<CamOption[]>([])
   const [cameraId, setCameraId] = useState<string | null>(null)
   const [canZoom, setCanZoom] = useState(false)
+  const [rawCameraCount, setRawCameraCount] = useState(0)
   const wantMaskRef = useRef(wantMask)
   wantMaskRef.current = wantMask
 
@@ -169,7 +175,9 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
   /** 重新枚举摄像头。只有拿到权限之后 label 才非空,所以不能在 start 之前调。 */
   const refreshCameras = useCallback(async () => {
     try {
-      setCameras(usableCameras(await navigator.mediaDevices.enumerateDevices()))
+      const all = await navigator.mediaDevices.enumerateDevices()
+      setRawCameraCount(all.filter((d) => d.kind === 'videoinput').length)
+      setCameras(usableCameras(all))
     } catch {
       /* 枚举失败不影响已经开着的那一路 */
     }
@@ -292,6 +300,6 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
 
   return {
     videoRef, status, message, landmarks, start, stop,
-    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras,
+    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras, rawCameraCount,
   }
 }

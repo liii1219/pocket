@@ -95,7 +95,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
 
   const {
     videoRef, status, message, start, stop,
-    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras,
+    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras, rawCameraCount,
   } = usePose(handleFrame, blur)
 
   const reps = out?.reps ?? 0
@@ -233,7 +233,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
             </span>
           )}
           <span>
-            {cameras.length} camera{cameras.length === 1 ? '' : 's'} found
+            {cameras.length} camera{cameras.length === 1 ? '' : 's'} usable
+            {rawCameraCount > cameras.length && ` (${rawCameraCount} reported, rest are desk views)`}
             {cameras.length === 1 &&
               ' — a phone shows up here once your computer picks it up, which this page cannot do for you'}
           </span>
