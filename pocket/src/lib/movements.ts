@@ -18,6 +18,8 @@ export type PoseCheckId =
   | 'elbow-bend'
   | 'neck-tilt'
   | 'torso-twist'
+  | 'shoulder-shrug'
+  | 'arm-raise'
 
 /**
  * 别人会不会注意到你在运动。
@@ -332,6 +334,38 @@ export const MOVEMENTS: Movement[] = [
     seconds: 40,
     costSeconds: 45,
     stopIf: 'Stop if anything pinches in the lower back.',
+  },
+  {
+    id: 'shoulder-shrug',
+    name: 'Shoulder shrugs',
+    cues: ['Up to the ears', 'Drop, do not lower'],
+    pattern: 'carry',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: ['shoulder', 'neck'],
+    visibility: 'discreet',
+    poseCheck: 'shoulder-shrug',
+    reps: 12,
+    costSeconds: 50,
+    stopIf: 'Stop if it tightens into your neck instead of releasing.',
+  },
+  {
+    id: 'lateral-raise',
+    name: 'Arm raises to the side',
+    cues: ['Lead with the elbows', 'Stop at shoulder height'],
+    pattern: 'push',
+    places: ['desk', 'floor', 'gym'],
+    noise: 'quiet',
+    space: 'none',
+    workClothes: true,
+    loads: ['shoulder'],
+    visibility: 'discreet',
+    poseCheck: 'arm-raise',
+    reps: 12,
+    costSeconds: 55,
+    stopIf: 'Stop if the shoulder pinches as you pass halfway.',
   },
 ]
 

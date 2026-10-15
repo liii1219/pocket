@@ -152,24 +152,79 @@ export function framingHint(lms: Landmark[], idx: number[]): string {
   return 'I cannot see you well enough to check this. Try standing side-on to the camera.'
 }
 
+/** 三维向量夹角(度)。两个向量都给对象,只取 x/y/z。 */
+function vecAngleDeg(a: Vec3, b: Vec3): number {
+  const dot = a.x * b.x + a.y * b.y + a.z * b.z
+  const ma = Math.hypot(a.x, a.y, a.z)
+  const mb = Math.hypot(b.x, b.y, b.z)
+  if (ma === 0 || mb === 0) return NaN
+  const cos = Math.min(1, Math.max(-1, dot / (ma * mb)))
+  return (Math.acos(cos) * 180) / Math.PI
+}
+
+interface Vec3 { x: number; y: number; z: number }
+const sub = (a: Landmark, b: Landmark): Vec3 => ({
+  x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0),
+})
+const dist3 = (a: Landmark, b: Landmark): number => {
+  const v = sub(a, b)
+  return Math.hypot(v.x, v.y, v.z)
+}
+
 /**
  * 头的侧倾角(度)。0 = 正,越大越偏。
  *
- * 用两耳连线和两肩连线的夹角,而不是"耳到肩的距离" —— 距离会随人和镜头的远近变,
- * 两条线的夹角不会。只用上半身四个点,笔记本摄像头拍得到。
+ * 🔴 对机位没有要求:算的是**两耳连线和两肩连线的三维夹角**。
+ * 三维向量之间的夹角在旋转下不变 —— 你正对、侧对、斜着对镜头,算出来都一样。
+ * (旧版本用的是画面上的二维夹角,侧身时投影会把角度压扁,所以必须正对镜头。)
+ * 必须传 worldLandmarks。
  */
-export function headTiltDeg(lms: Landmark[]): number {
-  const le = lms[LM.leftEar]
-  const re = lms[LM.rightEar]
-  const ls = lms[LM.leftShoulder]
-  const rs = lms[LM.rightShoulder]
+export function headTiltDeg(world: Landmark[]): number {
+  const le = world[LM.leftEar]
+  const re = world[LM.rightEar]
+  const ls = world[LM.leftShoulder]
+  const rs = world[LM.rightShoulder]
   if (!le || !re || !ls || !rs) return NaN
-  const ear = Math.atan2(re.y - le.y, re.x - le.x)
-  const sho = Math.atan2(rs.y - ls.y, rs.x - ls.x)
-  let d = ((ear - sho) * 180) / Math.PI
-  while (d > 90) d -= 180
-  while (d < -90) d += 180
-  return Math.abs(d)
+  return vecAngleDeg(sub(re, le), sub(rs, ls))
+}
+
+/**
+ * 耸肩幅度:肩到耳的距离 ÷ 两肩宽度。
+ *
+ * 🔴 对机位没有要求,而且对体型也没有要求:
+ * 两个都是三维距离,比值在旋转下不变,除以肩宽又抵消了人离镜头远近和身材差异。
+ * 放松时约 0.75,耸到底约 0.55(肩膀抬高,到耳朵的距离变短)。
+ * 必须传 worldLandmarks。
+ */
+export function shrugRatio(world: Landmark[]): number {
+  const le = world[LM.leftEar]
+  const re = world[LM.rightEar]
+  const ls = world[LM.leftShoulder]
+  const rs = world[LM.rightShoulder]
+  if (!le || !re || !ls || !rs) return NaN
+  const width = dist3(ls, rs)
+  if (width === 0) return NaN
+  return (dist3(le, ls) + dist3(re, rs)) / 2 / width
+}
+
+/**
+ * 手臂相对躯干抬起的角度(度)。
+ *
+ * 🔴 不用髋部 —— 参照轴取**对侧肩膀**,不是"髋到肩"那条线。
+ * 人坐在桌后时髋部常常被桌子挡住,旧版本因此直接判"看不清"。
+ * 手臂自然下垂时约 95°,侧平举约 10°,所以也是"角度越小越到位"。
+ * 必须传 worldLandmarks。
+ */
+export function armRaiseDeg(world: Landmark[]): number {
+  const ls = world[LM.leftShoulder]
+  const rs = world[LM.rightShoulder]
+  const le = world[LM.leftElbow]
+  const re = world[LM.rightElbow]
+  if (!ls || !rs || !le || !re) return NaN
+  const left = vecAngleDeg(sub(le, ls), sub(rs, ls))
+  const right = vecAngleDeg(sub(re, rs), sub(ls, rs))
+  if (Number.isNaN(left) || Number.isNaN(right)) return NaN
+  return (left + right) / 2
 }
 
 /**

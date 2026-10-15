@@ -11,7 +11,7 @@
  *    真正的塌腰判定需要深度相机或腰部惯性传感器。
  */
 
-import { angleDeg, framingHint, headTiltDeg, insideFrame, LM, mid, tiltFromVerticalDeg, torsoTwistDeg, visibleEnough, type Landmark } from './angles'
+import { angleDeg, armRaiseDeg, framingHint, headTiltDeg, insideFrame, LM, mid, shrugRatio, tiltFromVerticalDeg, torsoTwistDeg, visibleEnough, type Landmark } from './angles'
 
 export type Phase = 'up' | 'down'
 
@@ -261,11 +261,17 @@ export function checkElbow(
 const NECK_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
 const NECK_TH: Thresholds = { down: 165, up: 173, depth: 158, minMs: 1500 }
 
-export function checkNeckTilt(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+export function checkNeckTilt(
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+): CheckOutput {
   if (!visibleEnough(lms, NECK_IDX)) {
     return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, NECK_IDX) }
   }
-  const tilt = headTiltDeg(lms)
+  if (!world) return { ...state, ...NOT_VISIBLE }
+  const tilt = headTiltDeg(world)
   if (Number.isNaN(tilt)) return { ...state, ...NOT_VISIBLE }
   const inverted = 180 - tilt
 
@@ -315,6 +321,8 @@ export type CheckerId =
   | 'elbow-bend'
   | 'neck-tilt'
   | 'torso-twist'
+  | 'shoulder-shrug'
+  | 'arm-raise'
 
 /**
  * 判定函数签名。
@@ -335,6 +343,69 @@ export type PoseChecker = (
  * 坐姿转体要正对镜头坐好再转,深蹲要侧身而且整个人进画面。
  * 不说清楚的话,用户开了摄像头、动作也做了,系统却一直报看不清,看起来像坏的。
  */
+
+/* ------------------------------------------- 完全不挑机位的两个 */
+
+/**
+ * 耸肩。比值 = 肩到耳距离 ÷ 肩宽,两个都是三维距离,比值在旋转下不变。
+ * 🔴 正对、侧对、斜着对镜头都一样,只要头和肩在画面里。
+ * 放松约 0.75,耸到底约 0.55 —— 越小越到位,直接喂状态机。
+ */
+const SHRUG_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
+/** 阈值放大 100 倍,因为状态机吃的是"角度"量级的数 */
+const SHRUG_TH: Thresholds = { down: 68, up: 73, depth: 62, minMs: 1200 }
+
+export function checkShrug(
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+): CheckOutput {
+  if (!visibleEnough(lms, SHRUG_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, SHRUG_IDX) }
+  }
+  if (!world) return { ...state, ...NOT_VISIBLE }
+  const ratio = shrugRatio(world)
+  if (Number.isNaN(ratio)) return { ...state, ...NOT_VISIBLE }
+  const scaled = ratio * 100
+
+  const s = { ...state }
+  const { counted, repMinAngle } = advance(s, scaled, t, SHRUG_TH)
+  const cue = counted
+    ? pickCue(s, repMinAngle, SHRUG_TH, 'Lift the shoulders higher, right up to the ears.', 'Let them drop slowly.')
+    : null
+  return { ...s, confident: true, cue, angle: Math.round(scaled), counted }
+}
+
+/**
+ * 侧平举。角度 = 上臂相对**对侧肩膀**的三维夹角,不用髋部。
+ * 🔴 人坐在桌后髋部被挡住也能判,而且和机位无关。
+ * 自然下垂约 95°,举到侧平约 10° —— 越小越到位。
+ */
+const RAISE_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftElbow, LM.rightElbow]
+const RAISE_TH: Thresholds = { down: 60, up: 80, depth: 35, minMs: 1200 }
+
+export function checkArmRaise(
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+): CheckOutput {
+  if (!visibleEnough(lms, RAISE_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, RAISE_IDX) }
+  }
+  if (!world) return { ...state, ...NOT_VISIBLE }
+  const angle = armRaiseDeg(world)
+  if (Number.isNaN(angle)) return { ...state, ...NOT_VISIBLE }
+
+  const s = { ...state }
+  const { counted, repMinAngle } = advance(s, angle, t, RAISE_TH)
+  const cue = counted
+    ? pickCue(s, repMinAngle, RAISE_TH, 'Take the arms higher, out to the side.', 'Lower them slowly.')
+    : null
+  return { ...s, confident: true, cue, angle: Math.round(angle), counted }
+}
+
 export const CHECK_SETUP: Record<CheckerId, string> = {
   'squat-depth':
     'Stand side-on to the camera, far enough back that your feet are in the picture.',
@@ -344,6 +415,9 @@ export const CHECK_SETUP: Record<CheckerId, string> = {
   'elbow-bend': 'Turn side-on so the camera can see your elbow open and close.',
   'neck-tilt': 'Face the camera, head and shoulders in the picture. Keep the shoulders still.',
   'torso-twist': 'Sit facing the camera, square on, before you start turning.',
+  // 下面两个算的是三维比值和夹角,旋转下不变,所以不挑机位
+  'shoulder-shrug': 'Any angle is fine. Just keep your head and shoulders in the picture.',
+  'arm-raise': 'Any angle is fine. Just keep your head and shoulders in the picture.',
 }
 
 export const CHECKERS: Record<CheckerId, PoseChecker> = {
@@ -353,4 +427,6 @@ export const CHECKERS: Record<CheckerId, PoseChecker> = {
   'elbow-bend': checkElbow,
   'neck-tilt': checkNeckTilt,
   'torso-twist': checkTwist,
+  'shoulder-shrug': checkShrug,
+  'arm-raise': checkArmRaise,
 }
