@@ -249,7 +249,9 @@ function headlineFor(input: SessionInput, count: number): string {
   if (count === 0) return 'Not enough time for anything useful. Take the gap off.'
   // 标了很多酸痛时要说清楚课为什么变短了,否则用户只看到"少了"而不知道原因
   if (!input.alone) {
-    return `${plural(count, 'quiet movement')}. Nothing here looks like exercising.`
+    // 🔴 不要说 "quiet"。判据是会不会被**看见**,不是会不会被听见 ——
+    // noise 字段已经删了(全库都是 quiet,不区分任何东西)。
+    return `${plural(count, 'movement')}. None of them look like exercising.`
   }
   if (input.sore.length >= 3) {
     return `${plural(count, 'gentle movement')}. You marked a lot as sore, so this is mobility only.`

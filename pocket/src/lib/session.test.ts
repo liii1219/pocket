@@ -131,7 +131,10 @@ describe('composeSession', () => {
 
   it('周围有人时标题要说清楚', () => {
     const s = composeSession({ ...base, minutes: 10, alone: false })
-    expect(s.headline).toMatch(/Nothing here looks like exercising/)
+    // 断言语义不断言原句:要说清楚"看不出来是在运动",而且不能提"安静" ——
+    // 判据是会不会被看见,不是会不会被听见。
+    expect(s.headline).toMatch(/look like exercising/)
+    expect(s.headline).not.toMatch(/quiet/i)
   })
 
   it('一个人时拿得到显眼的动作', () => {

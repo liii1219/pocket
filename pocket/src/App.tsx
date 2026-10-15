@@ -200,7 +200,7 @@ export default function App() {
         <p className="alone-hint">
           {alone
             ? `${maxMin} minutes is as long as a session gets.`
-            : `${maxMin} minutes is as long as a quiet session gets. "Just me" goes longer.`}
+            : `${maxMin} minutes is as long as it gets without looking like exercise. "Just me" goes longer.`}
         </p>
       </label>
 
@@ -244,8 +244,8 @@ export default function App() {
         </div>
         <p className="alone-hint">
           {alone
-            ? 'You get the full session, including the ones that look like exercising.'
-            : 'You only get movements that look like stretching at a desk.'}
+            ? 'You get the full session, including the ones that need you out of your chair.'
+            : 'You stay in your chair. Nothing changes your outline enough to notice.'}
         </p>
       </div>
 
@@ -279,7 +279,7 @@ export default function App() {
           {session.shortfall === 'pool' && (
             <p className="summary warn">
               You asked for {session.wanted}, and there are only {session.items.length}{' '}
-              {alone ? 'that suit this setting' : 'quiet enough for people being around'}.
+              {alone ? 'that suit this setting' : 'that nobody would look up at'}.
             </p>
           )}
           <button className="primary big" onClick={() => setScreen('session')}>
