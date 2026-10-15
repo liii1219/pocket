@@ -511,7 +511,12 @@ interface TargetSpec {
 }
 
 const TARGET_SPECS = {
-  /** 四周散开:一般性的伸展 */
+  /**
+   * 四周散开:多方向够取。
+   * 这个动作的价值在于**每次方向都不一样** —— 另外两个一个永远在头顶、
+   * 一个永远在对侧,它是唯一需要每次重新找路径的。
+   * 规则是"伸手够,不是挪身子",所以要求手臂基本伸直。
+   */
   'reach-target': {
     track: 'wrists',
     radius: 0.085,
@@ -521,6 +526,15 @@ const TARGET_SPECS = {
       [0.30, 0.15], [0.70, 0.15],
       [0.50, 0.12],
     ],
+    gate: {
+      test: (lms, world) => {
+        const W = world ?? lms
+        const a = angleDeg(W[LM.leftShoulder], W[LM.leftElbow], W[LM.leftWrist])
+        const b = angleDeg(W[LM.rightShoulder], W[LM.rightElbow], W[LM.rightWrist])
+        return Math.max(Number.isNaN(a) ? 0 : a, Number.isNaN(b) ? 0 : b) > 150
+      },
+      cue: 'Extend the arm to reach it. Leaning your body over does not count.',
+    },
   },
   /** 全在头顶上方 + 要求手臂伸直:逼出真正的过头上举,而不是弯着胳膊够一下 */
   'reach-high': {

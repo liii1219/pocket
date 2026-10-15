@@ -2,13 +2,32 @@ import { describe, expect, it } from 'vitest'
 import { checkReach, initState, type CheckState } from './checkers'
 import { LM, type Landmark } from './angles'
 
-/** 手腕放在指定位置的骨架。其余点给足可见度。 */
-function withWrists(lx: number, ly: number, rx: number, ry: number): Landmark[] {
+/**
+ * 手腕放在指定位置的骨架。
+ * 肘放在肩-腕连线的中点 → 手臂是伸直的,满足"伸手够"的规则。
+ * bent: true 时把肘推离连线,做出弯臂。
+ */
+function withWrists(lx: number, ly: number, rx: number, ry: number, bent = false): Landmark[] {
   const lms: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.95 }))
-  lms[LM.leftShoulder] = { x: 0.39, y: 0.38, z: 0, visibility: 0.95 }
-  lms[LM.rightShoulder] = { x: 0.61, y: 0.38, z: 0, visibility: 0.95 }
-  lms[LM.leftWrist] = { x: lx, y: ly, z: 0, visibility: 0.95 }
-  lms[LM.rightWrist] = { x: rx, y: ry, z: 0, visibility: 0.95 }
+  const put = (i: number, x: number, y: number) => (lms[i] = { x, y, z: 0, visibility: 0.95 })
+  put(LM.leftShoulder, 0.39, 0.38)
+  put(LM.rightShoulder, 0.61, 0.38)
+  put(LM.leftWrist, lx, ly)
+  put(LM.rightWrist, rx, ry)
+  const elbow = (sx: number, sy: number, wx: number, wy: number) => {
+    const mx = (sx + wx) / 2
+    const my = (sy + wy) / 2
+    if (!bent) return [mx, my] as const
+    // 垂直于肩-腕方向推开,做出明显的弯曲
+    const dx = wx - sx
+    const dy = wy - sy
+    const len = Math.hypot(dx, dy) || 1
+    return [mx - (dy / len) * 0.12, my + (dx / len) * 0.12] as const
+  }
+  const [lex, ley] = elbow(0.39, 0.38, lx, ly)
+  const [rex, rey] = elbow(0.61, 0.38, rx, ry)
+  put(LM.leftElbow, lex, ley)
+  put(LM.rightElbow, rex, rey)
   return lms
 }
 
@@ -232,11 +251,13 @@ d4('姿势条件', () => {
     e4(checkReachCross(turned, s, 1000, turned).reps).toBe(1)
   })
 
-  i4('通用的碰圈没有额外条件', () => {
-    e4(targetGateCue('reach-target')).toBeNull()
+  i4('三个用手的玩法各有各的条件,用头的那个不需要', () => {
+    // 用头碰本身就只能靠歪头完成,没有"作弊路径",所以不需要额外条件。
     e4(targetGateCue('head-target')).toBeNull()
-    e4(targetGateCue('reach-high')).not.toBeNull()
-    e4(targetGateCue('reach-cross')).not.toBeNull()
+    const gates = ['reach-target', 'reach-high', 'reach-cross'].map(targetGateCue)
+    expect(gates.every((g) => g != null)).toBe(true)
+    // 而且三条话不一样 —— 否则等于同一个规则换皮
+    e4(new Set(gates).size).toBe(3)
   })
 })
 
@@ -286,5 +307,25 @@ d5('交叉手', () => {
     s = { ...s, targetX: tx }
     const correct = handAt('right', tx, s.targetY!)
     e5(checkReachCross(correct, s, 1000, correct).reps).toBe(1)
+  })
+})
+
+
+/* 通用碰圈的规则:伸手够,不是挪身子 */
+import { describe as d6, it as i6, expect as e6 } from 'vitest'
+
+d6('伸手够,不是挪身子', () => {
+  i6('手臂弯着碰到不算,并说明原因', () => {
+    let s = checkReach(resting(), initState(), 0)
+    const bent = withWrists(s.targetX!, s.targetY!, 0.6, 0.75, true)
+    const out = checkReach(bent, s, 1000, bent)
+    e6(out.reps).toBe(0)
+    e6(out.cue).toMatch(/Extend the arm/)
+  })
+
+  i6('伸直了就算', () => {
+    let s = checkReach(resting(), initState(), 0)
+    const straight = withWrists(s.targetX!, s.targetY!, 0.6, 0.75)
+    e6(checkReach(straight, s, 1000, straight).reps).toBe(1)
   })
 })

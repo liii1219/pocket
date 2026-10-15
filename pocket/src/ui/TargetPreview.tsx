@@ -86,9 +86,12 @@ export function TargetPreview({ checkId }: { checkId: string }) {
             <circle cx={60} cy={50} r={2.5} fill="var(--muted)" opacity={0.5} />
           </>
         ) : (
+          /* 一条伸直的手臂够向其中一个圈,说明"伸手够,不是挪身子" */
           <>
-            <circle cx={40} cy={50} r={3} fill="var(--accent)" />
-            <circle cx={60} cy={50} r={3} fill="var(--accent)" />
+            <path d="M50 41 L33 26" stroke="var(--accent)" strokeWidth={2}
+                  strokeLinecap="round" fill="none" strokeDasharray="3 3" />
+            <circle cx={33} cy={26} r={3} fill="var(--accent)" />
+            <circle cx={60} cy={50} r={2.5} fill="var(--muted)" opacity={0.5} />
           </>
         )}
       </svg>
@@ -98,7 +101,7 @@ export function TargetPreview({ checkId }: { checkId: string }) {
           ? 'Tip your head sideways, ear towards the shoulder, to touch each one with your head'
           : cross
             ? 'Touch each one with the hand on the far side, reaching across your body'
-            : 'Touch each one with either hand'}{' '}
+            : 'They turn up in a different direction every time. Touch each one with either hand'}{' '}
         and the next one moves somewhere else.
       </p>
       {/* 有姿势条件的话必须先说 —— 否则这几个动作看起来是同一个游戏 */}
