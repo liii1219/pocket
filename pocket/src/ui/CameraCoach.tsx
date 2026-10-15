@@ -82,8 +82,10 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     [checker, blur],
   )
 
-  const { videoRef, status, message, start, stop, cameras, cameraId, pickCamera, canZoom, widen } =
-    usePose(handleFrame, blur)
+  const {
+    videoRef, status, message, start, stop,
+    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras,
+  } = usePose(handleFrame, blur)
 
   const reps = out?.reps ?? 0
   const done = target > 0 && reps >= target
@@ -227,7 +229,11 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
               Widest view
             </button>
           )}
-          {cameras.length > 1 && (
+          {/*
+            只要有摄像头就显示,不再要求"两个以上"。
+            藏起来的话用户分不清是"只有一个摄像头"还是"这个功能坏了" —— 实测就被问到了。
+          */}
+          {cameras.length > 0 && (
             <select
               className="chip"
               value={cameraId ?? ''}
@@ -240,6 +246,9 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
               ))}
             </select>
           )}
+          <button className="chip" onClick={() => void refreshCameras()}>
+            Look again
+          </button>
         </div>
       )}
 

@@ -69,6 +69,8 @@ interface UsePoseResult {
    */
   canZoom: boolean
   widen: () => Promise<void>
+  /** 手动重新枚举。接力相机刚连上时 devicechange 偶尔不触发,给个手动出口 */
+  refreshCameras: () => Promise<void>
 }
 
 const WASM_PATH = `${import.meta.env.BASE_URL}mediapipe/wasm`
@@ -288,5 +290,8 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
 
   useEffect(() => stop, [stop])
 
-  return { videoRef, status, message, landmarks, start, stop, cameras, cameraId, pickCamera, canZoom, widen }
+  return {
+    videoRef, status, message, landmarks, start, stop,
+    cameras, cameraId, pickCamera, canZoom, widen, refreshCameras,
+  }
 }
