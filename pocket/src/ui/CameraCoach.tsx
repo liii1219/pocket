@@ -80,22 +80,49 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   const done = target > 0 && reps >= target
 
   const feedback = useMemo(() => {
-    if (!checker) return 'No camera check for this one — follow the two cues.'
     if (out == null) return 'Stand where your whole body is in frame.'
     if (!out.confident) return out.cue ?? 'I cannot see you well enough to check this.'
     if (out.cue) return out.cue
     return out.phase === 'down' ? 'Hold, then come back up.' : 'Good. Keep going.'
   }, [checker, out])
 
+  const head = (
+    <div className="coach-head">
+      <h2>{movement.name}</h2>
+      <p className="cues">
+        <span>{movement.cues[0]}</span>
+        <span>{movement.cues[1]}</span>
+      </p>
+    </div>
+  )
+
+  /**
+   * 🔴 没有判定器就不出摄像头。
+   * 十八个动作里只有三个有姿态判定。之前不管有没有,一律弹"Turn on the check",
+   * 用户点开之后摄像头确实打开了,但什么都不判 —— 看起来像坏的。
+   * 而且为判不了的动作白白加载 9.4MB 的模型。
+   */
+  if (!checker) {
+    return (
+      <div className="coach">
+        {head}
+        <MovementDiagram movementId={movement.id} />
+        <p className="no-check">
+          Follow the two cues. There is no camera check for this one, so nothing is watching.
+        </p>
+        <p className="stop-if">{movement.stopIf}</p>
+        <div className="actions">
+          <button className="primary" onClick={onDone}>
+            Next movement
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="coach">
-      <div className="coach-head">
-        <h2>{movement.name}</h2>
-        <p className="cues">
-          <span>{movement.cues[0]}</span>
-          <span>{movement.cues[1]}</span>
-        </p>
-      </div>
+      {head}
 
       {status !== 'running' && <MovementDiagram movementId={movement.id} />}
 
@@ -113,7 +140,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
           <div className="stage-cover">
             {status === 'idle' && (
               <>
-                <p>The camera can check this movement. Nothing leaves your phone.</p>
+                <p>The camera can check this movement. Nothing leaves this device.</p>
                 <button className="primary" onClick={start}>
                   Turn on the check
                 </button>

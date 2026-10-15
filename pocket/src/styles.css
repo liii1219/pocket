@@ -230,3 +230,4 @@ button:active { transform: scale(.985); }
 .fig3d-canvas canvas { display: block; margin: 0 auto; }
 .fig3d-hint { color: var(--muted); font-size: 12px; text-align: center; margin: 0 0 6px; }
 .fig3d-loading { height: 290px; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+.no-check { color: var(--muted); font-size: 15px; margin: 14px 0 0; }
