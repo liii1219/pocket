@@ -83,3 +83,31 @@ describe('碰圆圈', () => {
     expect(out.reps).toBe(1)
   })
 })
+
+/* 蒙版有效性 —— 虚化为什么会"开着却没糊" */
+import { describe as d2, it as i2, expect as e2 } from 'vitest'
+
+d2('蒙版有效性', () => {
+  // 把 blur.ts 里的判断逻辑原样写一遍来测:它是模块私有的,
+  // 但这条规则值得锁住 —— 实测遇到过整帧都判成"人"的蒙版。
+  const CUTOFF = 0.35
+  const usable = (mask: Float32Array) => {
+    const step = Math.max(1, Math.floor(mask.length / 4000))
+    let hit = 0, n = 0
+    for (let i = 0; i < mask.length; i += step) { if (mask[i] > CUTOFF) hit++; n++ }
+    const frac = hit / n
+    return frac > 0.02 && frac < 0.85
+  }
+
+  i2('整帧都是人 → 不可用', () => {
+    e2(usable(new Float32Array(10000).fill(1))).toBe(false)
+  })
+  i2('整帧都不是人 → 不可用', () => {
+    e2(usable(new Float32Array(10000).fill(0))).toBe(false)
+  })
+  i2('人占三成 → 可用', () => {
+    const m = new Float32Array(10000)
+    m.fill(1, 0, 3000)
+    e2(usable(m)).toBe(true)
+  })
+})

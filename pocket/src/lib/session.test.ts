@@ -97,10 +97,14 @@ describe('composeSession', () => {
   })
 
   it('针对酸痛部位的活动度动作会保留,并说明原因', () => {
+    // 断言行为,不断言某个具体动作 —— 排序规则变了之后具体是哪一个会变,
+    // 但"针对酸痛部位的活动度动作留下来并解释自己"这条规则不该变。
     const s = composeSession({ ...base, minutes: 10, sore: ['shoulder'] })
-    const opener = s.items.find((i) => i.movement.id === 'shoulder-openers')
-    expect(opener).toBeDefined()
-    expect(opener!.reason).toMatch(/shoulder you marked sore/)
+    const targeted = s.items.find(
+      (i) => i.movement.pattern === 'mobility' && i.movement.loads.includes('shoulder'),
+    )
+    expect(targeted).toBeDefined()
+    expect(targeted!.reason).toMatch(/shoulder you marked sore/)
   })
 
   it('标了很多酸痛时,标题要交代课为什么变短', () => {

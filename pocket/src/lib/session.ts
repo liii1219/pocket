@@ -89,8 +89,19 @@ export function composeSession(input: SessionInput): Session {
     if (soft.length >= 2) pool = soft
   }
 
-  // 排序而非随机:先给有摄像头判定的(用户能拿到反馈),再按耗时从小到大,让短空档也能装下几个
+  /**
+   * 排序而非随机,保证可复现。
+   *
+   * 🔴 一个人的时候把力量动作排在前面。
+   * 否则会出现:安静动作大多有判定器又耗时短,六个名额全被它们占掉,
+   * "Just me" 和 "People nearby" 给的课几乎一样 —— visibility 这一维就白加了。
+   * 有privacy的时候,能做的事就该和被人看着的时候不一样。
+   */
   const ordered = [...pool].sort((a, b) => {
+    if (input.alone) {
+      const byStrength = Number(a.pattern === 'mobility') - Number(b.pattern === 'mobility')
+      if (byStrength !== 0) return byStrength
+    }
     const byCheck = Number(Boolean(b.poseCheck)) - Number(Boolean(a.poseCheck))
     if (byCheck !== 0) return byCheck
     return a.costSeconds - b.costSeconds

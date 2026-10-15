@@ -88,6 +88,23 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   const reps = out?.reps ?? 0
   const done = target > 0 && reps >= target
 
+  /**
+   * 保持类动作(有 seconds 没有 reps)显示倒计时,不显示次数。
+   * 🔴 之前一律显示次数:坐姿转体是 40 秒的保持动作,左右各转一次就加 2,
+   * 四十秒下来变成"23",用户不知道这个数字是什么意思,也没有上限。
+   */
+  const [left, setLeft] = useState(movement.seconds ?? 0)
+  useEffect(() => {
+    setLeft(movement.seconds ?? 0)
+  }, [movement.id, movement.seconds])
+  useEffect(() => {
+    if (!movement.seconds || status !== 'running') return
+    const id = setInterval(() => setLeft((v) => (v > 0 ? v - 1 : 0)), 1000)
+    return () => clearInterval(id)
+  }, [movement.id, movement.seconds, status])
+
+  const timed = movement.seconds != null && movement.reps == null
+
   const feedback = useMemo(() => {
     if (out == null) return 'Stand where your whole body is in frame.'
     if (!out.confident) return out.cue ?? 'I cannot see you well enough to check this.'
@@ -174,8 +191,17 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
 
       <div className="readout">
         <div className="count">
-          <strong>{reps}</strong>
-          {target > 0 && <span> / {target}</span>}
+          {timed ? (
+            <>
+              <strong>{left}</strong>
+              <span>s</span>
+            </>
+          ) : (
+            <>
+              <strong>{reps}</strong>
+              {target > 0 && <span> / {target}</span>}
+            </>
+          )}
         </div>
         <p className={out && !out.confident ? 'feedback unsure' : 'feedback'}>{feedback}</p>
       </div>

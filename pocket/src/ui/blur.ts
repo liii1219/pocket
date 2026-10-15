@@ -23,6 +23,23 @@ const BLUR_PX = 12
 /** 蒙版低于这个概率算背景。留一点余量,避免边缘抖动。 */
 const CUTOFF = 0.35
 
+/**
+ * 蒙版有没有用。
+ * 人在画面里通常占 5%–70%。整帧都是人(>85%)或几乎没有人(<2%)都说明这张蒙版不可信。
+ * 抽样算,不逐像素 —— 每帧全扫一遍太贵。
+ */
+function maskIsUsable(mask: Float32Array): boolean {
+  const step = Math.max(1, Math.floor(mask.length / 4000))
+  let hit = 0
+  let n = 0
+  for (let i = 0; i < mask.length; i += step) {
+    if (mask[i] > CUTOFF) hit++
+    n++
+  }
+  const frac = hit / n
+  return frac > 0.02 && frac < 0.85
+}
+
 interface Scratch {
   sharp: HTMLCanvasElement
   mask: HTMLCanvasElement
@@ -65,7 +82,14 @@ export function drawBlurred(
   if (!ctx) return
   const { width: w, height: h } = canvas
 
-  // 🔴 没有蒙版时的兜底:用关键点围出人所在的区域。
+  // 🔴 蒙版存在但无效时也要兜底。
+  // 实测遇到过:按钮开着、骨架在画,画面却一点没糊 —— 因为蒙版整帧都判成"人",
+  // "抠出人"等于没抠。只检查 null 发现不了这种情况。
+  if (maskData && maskW > 0 && maskH > 0 && !maskIsUsable(maskData)) {
+    maskData = null
+  }
+
+  // 没有蒙版时的兜底:用关键点围出人所在的区域。
   // 分割蒙版在某些设备/委托组合下拿不到(用户测试里就遇到了:按钮开着但画面没虚化,
   // 因为代码默默退回了画原帧)。宁可边缘粗一点,也不能让这个功能看起来是坏的。
   if (!maskData || maskW === 0 || maskH === 0) {

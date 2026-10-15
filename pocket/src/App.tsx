@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea, Place } from './lib/movements'
 import { composeSession, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
+import { PhoneQR } from './ui/PhoneQR'
 
 type Screen = 'time' | 'session' | 'coach'
 
@@ -196,6 +197,8 @@ export default function App() {
             : 'You only get movements that look like stretching at a desk.'}
         </p>
       </div>
+
+      <PhoneQR />
 
       <p className="fineprint">
         Nothing to set up and nothing to install. Do it in the clothes you are wearing.
