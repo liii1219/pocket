@@ -542,6 +542,19 @@ export function checkReach(lms: Landmark[], state: CheckState, t: number): Check
   return { ...s, confident: true, cue: null, angle: pct, counted: false }
 }
 
+/** 读数那个数字是什么。不写的话用户只看到一个跳动的数,不知道在量什么。 */
+export const CHECK_UNIT: Record<CheckerId, string> = {
+  'reach-target': '% to the circle',
+  'squat-depth': '° knee',
+  'hinge-back': '° hip',
+  'shoulder-range': '° arm',
+  'elbow-bend': '° elbow',
+  'neck-tilt': '° head tilt',
+  'torso-twist': '° turn',
+  'shoulder-shrug': ' shrug',
+  'arm-raise': '° arm',
+}
+
 export const CHECK_SETUP: Record<CheckerId, string> = {
   'reach-target': 'Sit or stand so your head and both hands are in the picture. Any angle is fine.',
   'squat-depth':

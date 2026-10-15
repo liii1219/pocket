@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Movement } from '../lib/movements'
-import { CHECK_SETUP, CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
+import { CHECK_SETUP, CHECK_UNIT, CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
 import type { Landmark } from '../lib/pose/angles'
 import { LM } from '../lib/pose/angles'
 import { MovementDiagram } from './MovementDiagram'
@@ -221,7 +221,12 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
 
       {status === 'running' && (
         <p className="readout-meta">
-          {out?.angle != null && <span>{out.angle}</span>}
+          {out?.angle != null && movement.poseCheck && (
+            <span>
+              {out.angle}
+              {CHECK_UNIT[movement.poseCheck]}
+            </span>
+          )}
           {blur && (
             <span className={blurMode === 'none' ? 'warn' : undefined}>
               blur: {blurMode === 'mask' ? 'cut-out' : blurMode === 'outline' ? 'outline' : 'not working'}
