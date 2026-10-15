@@ -54,7 +54,29 @@ export function TargetPreview({ checkId }: { checkId: string }) {
 
         {/* 碰的那个点:手或头 */}
         {useHead ? (
-          <circle cx={50} cy={30} r={3} fill="var(--accent)" />
+          /*
+            头要**侧倾**过去够圈,光标一个点看不出"怎么动"。
+            画一个歪过去的头(虚线轮廓)加一段弧,把动作本身画出来。
+          */
+          <>
+            {/* 歪过去之后脖子的方向:从肩膀中点指向歪过去的头 */}
+            <path d="M50 38 L33 25" stroke="var(--accent)" strokeWidth={1.6}
+                  strokeDasharray="2 2" strokeLinecap="round" opacity={0.65} />
+            {/* 头歪到正好够着圈的位置 */}
+            <circle
+              cx={31} cy={21} r={6}
+              fill="none" stroke="var(--accent)" strokeWidth={1.8}
+              strokeDasharray="2.5 2.5"
+            />
+            {/* 从正位到歪位的运动弧 */}
+            <path
+              d="M48 24 A 16 16 0 0 0 34 16"
+              stroke="var(--accent)" strokeWidth={1.4} fill="none"
+              strokeDasharray="2 2.5" strokeLinecap="round" opacity={0.7}
+            />
+            <path d="M34 16 l3.2 0.3 -1.6 2.6 Z" fill="var(--accent)" opacity={0.7} />
+            <circle cx={50} cy={30} r={3} fill="var(--accent)" />
+          </>
         ) : cross ? (
           // 一条横过身体的手臂,说明"用远的那只手"
           <>
@@ -73,7 +95,7 @@ export function TargetPreview({ checkId }: { checkId: string }) {
       <p className="targetpreview-note">
         Circles appear here, one at a time.{' '}
         {useHead
-          ? 'Touch each one with your head'
+          ? 'Tip your head sideways, ear towards the shoulder, to touch each one with your head'
           : cross
             ? 'Touch each one with the hand on the far side, reaching across your body'
             : 'Touch each one with either hand'}{' '}
