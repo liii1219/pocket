@@ -11,7 +11,13 @@
 export type Place = 'desk' | 'floor' | 'gym'
 export type BodyArea = 'neck' | 'shoulder' | 'back' | 'hip' | 'knee' | 'ankle' | 'wrist'
 export type Pattern = 'squat' | 'hinge' | 'push' | 'pull' | 'mobility' | 'carry'
-export type PoseCheckId = 'squat-depth' | 'hinge-back' | 'shoulder-range'
+export type PoseCheckId =
+  | 'squat-depth'
+  | 'hinge-back'
+  | 'shoulder-range'
+  | 'elbow-bend'
+  | 'neck-tilt'
+  | 'torso-twist'
 
 /**
  * 别人会不会注意到你在运动。
@@ -95,7 +101,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'obvious',
     reps: 10,
     costSeconds: 70,
-    poseCheck: undefined,
+    poseCheck: 'elbow-bend',
     stopIf: 'Stop if your wrists or shoulders pinch.',
   },
   {
@@ -111,6 +117,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'obvious',
     reps: 10,
     costSeconds: 75,
+    poseCheck: 'elbow-bend',
     stopIf: 'Stop if your shoulder catches.',
   },
   {
@@ -142,6 +149,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'discreet',
     seconds: 40,
     costSeconds: 50,
+    poseCheck: 'neck-tilt',
     stopIf: 'Stop if anything shoots down your arm.',
   },
   {
@@ -217,6 +225,7 @@ export const MOVEMENTS: Movement[] = [
     visibility: 'discreet',
     seconds: 40,
     costSeconds: 45,
+    poseCheck: 'torso-twist',
     stopIf: 'Stop if it pinches in the lower back rather than stretching.',
   },
   {

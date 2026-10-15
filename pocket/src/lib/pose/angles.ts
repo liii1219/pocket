@@ -15,6 +15,8 @@ export interface Landmark {
 /** MediaPipe Pose 的关键点下标(只列我们用到的)。 */
 export const LM = {
   nose: 0,
+  leftEar: 7,
+  rightEar: 8,
   leftShoulder: 11,
   rightShoulder: 12,
   leftElbow: 13,
@@ -148,4 +150,41 @@ export function framingHint(lms: Landmark[], idx: number[]): string {
     return 'I have lost your shoulders. Face the camera and make sure the room is lit.'
   }
   return 'I cannot see you well enough to check this. Try standing side-on to the camera.'
+}
+
+/**
+ * 头的侧倾角(度)。0 = 正,越大越偏。
+ *
+ * 用两耳连线和两肩连线的夹角,而不是"耳到肩的距离" —— 距离会随人和镜头的远近变,
+ * 两条线的夹角不会。只用上半身四个点,笔记本摄像头拍得到。
+ */
+export function headTiltDeg(lms: Landmark[]): number {
+  const le = lms[LM.leftEar]
+  const re = lms[LM.rightEar]
+  const ls = lms[LM.leftShoulder]
+  const rs = lms[LM.rightShoulder]
+  if (!le || !re || !ls || !rs) return NaN
+  const ear = Math.atan2(re.y - le.y, re.x - le.x)
+  const sho = Math.atan2(rs.y - ls.y, rs.x - ls.x)
+  let d = ((ear - sho) * 180) / Math.PI
+  while (d > 90) d -= 180
+  while (d < -90) d += 180
+  return Math.abs(d)
+}
+
+/**
+ * 躯干相对镜头的扭转角(度)。0 = 正对镜头,90 = 完全侧身。
+ *
+ * 用**三维**肩膀连线在水平面上的朝向:正对镜头时两肩的 z 相同,转体时 z 差变大。
+ * 必须传 worldLandmarks —— 画面坐标的 z 不是米制的,算出来不稳。
+ * 不需要髋部,所以人坐在桌后、下半身被桌子挡住也能判。
+ */
+export function torsoTwistDeg(world: Landmark[]): number {
+  const ls = world[LM.leftShoulder]
+  const rs = world[LM.rightShoulder]
+  if (!ls || !rs) return NaN
+  const dx = Math.abs(rs.x - ls.x)
+  const dz = Math.abs((rs.z ?? 0) - (ls.z ?? 0))
+  if (dx === 0 && dz === 0) return NaN
+  return (Math.atan2(dz, dx) * 180) / Math.PI
 }

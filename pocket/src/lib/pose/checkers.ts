@@ -11,7 +11,7 @@
  *    真正的塌腰判定需要深度相机或腰部惯性传感器。
  */
 
-import { angleDeg, framingHint, insideFrame, LM, mid, tiltFromVerticalDeg, visibleEnough, type Landmark } from './angles'
+import { angleDeg, framingHint, headTiltDeg, insideFrame, LM, mid, tiltFromVerticalDeg, torsoTwistDeg, visibleEnough, type Landmark } from './angles'
 
 export type Phase = 'up' | 'down'
 
@@ -217,7 +217,104 @@ export function checkShoulder(lms: Landmark[], state: CheckState, t: number, wor
   return { ...state, confident: true, cue, angle, counted }
 }
 
-export type CheckerId = 'squat-depth' | 'hinge-back' | 'shoulder-range'
+
+/* ------------------------------------------------- 只用上半身的三个判定器 */
+
+/**
+ * 这三个只看肩、肘、腕、耳 —— 笔记本摄像头在桌前**一定**拍得到的那部分。
+ * 深蹲和髋铰链需要膝和踝,人坐在桌前时根本不在画面里(用户测试里就卡在这)。
+ * 所以要让"周围有人"那条线也能用上摄像头,判定器必须只依赖上半身。
+ */
+
+/** 肩-肘-腕夹角。伸直约 170°,弯到底约 70°。靠墙俯卧撑和划船都用它。 */
+const ELBOW_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftElbow, LM.rightElbow, LM.leftWrist, LM.rightWrist]
+const ELBOW_TH: Thresholds = { down: 125, up: 155, depth: 100, minMs: 1100 }
+
+export function checkElbow(
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+): CheckOutput {
+  if (!visibleEnough(lms, ELBOW_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, ELBOW_IDX) }
+  }
+  const W = world ?? lms
+  const shoulder = mid(W[LM.leftShoulder], W[LM.rightShoulder])
+  const elbow = mid(W[LM.leftElbow], W[LM.rightElbow])
+  const wrist = mid(W[LM.leftWrist], W[LM.rightWrist])
+  const angle = angleDeg(shoulder, elbow, wrist)
+  if (Number.isNaN(angle)) return { ...state, ...NOT_VISIBLE }
+
+  const s = { ...state }
+  const { counted, repMinAngle } = advance(s, angle, t, ELBOW_TH)
+  const cue = counted
+    ? pickCue(s, repMinAngle, ELBOW_TH, 'Bend the elbows further next time.', 'Slower on the way down.')
+    : null
+  return { ...s, confident: true, cue, angle, counted }
+}
+
+/**
+ * 头侧倾。耳朵往肩膀靠,到位再回正算一次。
+ * 🔴 倾角是**越大越好**,和深蹲相反,所以喂给状态机的是 180 - tilt。
+ */
+const NECK_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
+const NECK_TH: Thresholds = { down: 165, up: 173, depth: 158, minMs: 1500 }
+
+export function checkNeckTilt(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+  if (!visibleEnough(lms, NECK_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, NECK_IDX) }
+  }
+  const tilt = headTiltDeg(lms)
+  if (Number.isNaN(tilt)) return { ...state, ...NOT_VISIBLE }
+  const inverted = 180 - tilt
+
+  const s = { ...state }
+  const { counted, repMinAngle } = advance(s, inverted, t, NECK_TH)
+  const cue = counted
+    ? pickCue(s, repMinAngle, NECK_TH, 'Let the ear travel further towards the shoulder.', 'Ease into it, do not snap.')
+    : null
+  return { ...s, confident: true, cue, angle: Math.round(tilt), counted }
+}
+
+/**
+ * 躯干扭转。正对镜头坐好,转到一侧再回正算一次。
+ * 需要 world 坐标:判的是肩膀连线在水平面上转了多少,画面坐标算不出来。
+ */
+const TWIST_IDX = [LM.leftShoulder, LM.rightShoulder]
+const TWIST_TH: Thresholds = { down: 155, up: 170, depth: 145, minMs: 1500 }
+
+export function checkTwist(
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+): CheckOutput {
+  if (!visibleEnough(lms, TWIST_IDX)) {
+    return { ...state, ...NOT_VISIBLE, cue: framingHint(lms, TWIST_IDX) }
+  }
+  if (!world) {
+    return { ...state, confident: false, cue: 'Turning needs the 3D view, which is not ready yet.', angle: null, counted: false }
+  }
+  const twist = torsoTwistDeg(world)
+  if (Number.isNaN(twist)) return { ...state, ...NOT_VISIBLE }
+  const inverted = 180 - twist
+
+  const s = { ...state }
+  const { counted, repMinAngle } = advance(s, inverted, t, TWIST_TH)
+  const cue = counted
+    ? pickCue(s, repMinAngle, TWIST_TH, 'Turn a little further through the ribs.', 'Slower, and keep sitting tall.')
+    : null
+  return { ...s, confident: true, cue, angle: Math.round(twist), counted }
+}
+
+export type CheckerId =
+  | 'squat-depth'
+  | 'hinge-back'
+  | 'shoulder-range'
+  | 'elbow-bend'
+  | 'neck-tilt'
+  | 'torso-twist'
 
 /**
  * 判定函数签名。
@@ -235,4 +332,7 @@ export const CHECKERS: Record<CheckerId, PoseChecker> = {
   'squat-depth': checkSquat,
   'hinge-back': checkHinge,
   'shoulder-range': checkShoulder,
+  'elbow-bend': checkElbow,
+  'neck-tilt': checkNeckTilt,
+  'torso-twist': checkTwist,
 }
