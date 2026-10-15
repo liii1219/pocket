@@ -328,6 +328,24 @@ export type PoseChecker = (
   world?: Landmark[],
 ) => CheckOutput
 
+/**
+ * 开摄像头之前要告诉用户**怎么站**。
+ *
+ * 用户测试里的问题:遮罩上只写"摄像头能判这个动作",但判定本身对机位有要求 ——
+ * 坐姿转体要正对镜头坐好再转,深蹲要侧身而且整个人进画面。
+ * 不说清楚的话,用户开了摄像头、动作也做了,系统却一直报看不清,看起来像坏的。
+ */
+export const CHECK_SETUP: Record<CheckerId, string> = {
+  'squat-depth':
+    'Stand side-on to the camera, far enough back that your feet are in the picture.',
+  'hinge-back':
+    'Stand side-on to the camera, far enough back that your knees are in the picture.',
+  'shoulder-range': 'Face the camera. Your head and both arms need to be in the picture.',
+  'elbow-bend': 'Turn side-on so the camera can see your elbow open and close.',
+  'neck-tilt': 'Face the camera, head and shoulders in the picture. Keep the shoulders still.',
+  'torso-twist': 'Sit facing the camera, square on, before you start turning.',
+}
+
 export const CHECKERS: Record<CheckerId, PoseChecker> = {
   'squat-depth': checkSquat,
   'hinge-back': checkHinge,

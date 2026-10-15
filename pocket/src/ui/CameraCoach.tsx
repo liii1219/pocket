@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Movement } from '../lib/movements'
-import { CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
+import { CHECK_SETUP, CHECKERS, initState, type CheckOutput, type CheckState } from '../lib/pose/checkers'
 import type { Landmark } from '../lib/pose/angles'
 import { LM } from '../lib/pose/angles'
 import { MovementDiagram } from './MovementDiagram'
@@ -140,7 +140,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
           <div className="stage-cover">
             {status === 'idle' && (
               <>
-                <p>The camera can check this movement. Nothing leaves this device.</p>
+                <p className="setup">{movement.poseCheck && CHECK_SETUP[movement.poseCheck]}</p>
+                <p>Nothing leaves this device.</p>
                 <button className="primary" onClick={start}>
                   Turn on the check
                 </button>
