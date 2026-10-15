@@ -30,6 +30,16 @@ export interface Rig {
   elbowX?: number
   /** 踝,用来做提踵 */
   ankleX?: number
+  ankleLX?: number
+  ankleRX?: number
+  /** 肩膀整体上下。耸肩用,负值向上 */
+  shoulderY?: number
+  /** 上臂外展(绕 Z)。侧平举用,正值向外抬起 */
+  shoulderZ?: number
+  /** 躯干侧倾。坐姿侧弯用 */
+  spineZ?: number
+  /** 头前后移。缩下巴用,负值后缩 */
+  headZpos?: number
 }
 
 export interface Frames {
@@ -44,6 +54,46 @@ export interface Frames {
  * 符号约定:绕 X 轴负值把肢体向前摆(镜头在 +Z),正值向后。
  */
 export const RIGS: Record<string, Frames> = {
+  'shoulder-shrug': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderY: -0.1 },
+    labelA: 'Relaxed', labelB: 'Up to the ears',
+  },
+  'lateral-raise': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderZ: 1.5 },
+    labelA: 'Arms down', labelB: 'Shoulder height',
+  },
+  'side-bend': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, spineZ: 0.42, shoulderZ: 0.5 },
+    labelA: 'Sit tall', labelB: 'Reach long',
+  },
+  'scap-squeeze': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderX: -0.5, elbowX: 1.1 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, shoulderX: -0.1, elbowX: 1.5 },
+    labelA: 'Elbows forward', labelB: 'Blades together',
+  },
+  'seated-march': {
+    a: { rootY: -0.45, hipLX: -1.5, kneeLX: 1.5, hipRX: -1.5, kneeRX: 1.5 },
+    b: { rootY: -0.45, hipLX: -2.1, kneeLX: 1.3, hipRX: -1.5, kneeRX: 1.5 },
+    labelA: 'Both feet down', labelB: 'Lift one knee',
+  },
+  'ankle-circles': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, ankleLX: -0.5 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, ankleLX: 0.6 },
+    labelA: 'Toes up', labelB: 'Toes down',
+  },
+  'chin-tuck': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, headZpos: 0.07 },
+    b: { rootY: -0.45, hipX: -1.5, kneeX: 1.5, headZpos: -0.03 },
+    labelA: 'Chin forward', labelB: 'Chin back',
+  },
+  'glute-squeeze': {
+    a: { rootY: -0.45, hipX: -1.5, kneeX: 1.5 },
+    b: { rootY: -0.42, hipX: -1.55, kneeX: 1.5, spineX: 0.08 },
+    labelA: 'Sit normally', labelB: 'Squeeze and lift',
+  },
   'chair-squat': {
     a: {},
     b: { rootY: -0.38, hipX: -1.35, kneeX: 1.55, spineX: -0.45, shoulderX: -1.4 },

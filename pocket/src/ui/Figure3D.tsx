@@ -133,12 +133,30 @@ function buildFigure(colour: number): { group: THREE.Group; parts: Parts } {
   }
 }
 
+/** 肩关节在躯干上的基准高度,耸肩时在这个基础上偏移 */
+const SHOULDER_Y = 0.56
+/** 头在躯干上的基准高度 */
+const HEAD_Y = 0.66
+
 function applyRig(p: Parts, a: Rig, b: Rig, t: number) {
   p.root.position.y = lerp(a.rootY, b.rootY, t)
   p.root.rotation.x = lerp(a.rootX, b.rootX, t)
   p.spine.rotation.x = lerp(a.spineX, b.spineX, t)
   p.spine.rotation.y = lerp(a.spineY, b.spineY, t)
+  p.spine.rotation.z = lerp(a.spineZ, b.spineZ, t)
   p.head.rotation.z = lerp(a.headZ, b.headZ, t)
+  p.head.position.y = HEAD_Y
+  p.head.position.z = lerp(a.headZpos, b.headZpos, t)
+
+  // 耸肩:整个肩关节上下移,不是转
+  const sy = SHOULDER_Y - lerp(a.shoulderY, b.shoulderY, t)
+  p.shoulderL.position.y = sy
+  p.shoulderR.position.y = sy
+
+  // 外展:绕 Z 转,左右镜像
+  const sz = lerp(a.shoulderZ, b.shoulderZ, t)
+  p.shoulderL.rotation.z = -sz
+  p.shoulderR.rotation.z = sz
 
   const hl = lerp(a.hipLX ?? a.hipX, b.hipLX ?? b.hipX, t)
   const hr = lerp(a.hipRX ?? a.hipX, b.hipRX ?? b.hipX, t)
@@ -157,9 +175,8 @@ function applyRig(p: Parts, a: Rig, b: Rig, t: number) {
   p.elbowL.rotation.x = el
   p.elbowR.rotation.x = el
 
-  const an = lerp(a.ankleX, b.ankleX, t)
-  p.ankleL.rotation.x = an
-  p.ankleR.rotation.x = an
+  p.ankleL.rotation.x = lerp(a.ankleLX ?? a.ankleX, b.ankleLX ?? b.ankleX, t)
+  p.ankleR.rotation.x = lerp(a.ankleRX ?? a.ankleX, b.ankleRX ?? b.ankleX, t)
 }
 
 export function Figure3D({ movementId }: { movementId: string }) {

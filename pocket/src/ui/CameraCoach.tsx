@@ -66,7 +66,16 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH, f.landmarks)
       draw(canvasRef.current, f.landmarks)
       if (!checker) return
-      setOut(checker(f.landmarks, stateRef.current, performance.now(), f.world))
+      /**
+       * 🔴 必须把新状态写回 ref。
+       * 之前只把 stateRef.current 传进去、却没接住返回值,等于每一帧都从初始状态重算:
+       * phase 永远停在 'up',走不完 up→down→up,次数永远是 0;
+       * 基线采样数也每帧归零,"正在学习静息位置"的提示永远不消失。
+       * CheckOutput 继承自 CheckState,所以可以直接当作下一帧的输入。
+       */
+      const next = checker(f.landmarks, stateRef.current, performance.now(), f.world)
+      stateRef.current = next
+      setOut(next)
     },
     // videoRef 是稳定的 ref,不用进依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
