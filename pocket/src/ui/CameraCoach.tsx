@@ -66,7 +66,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       if (blur && cam && vid) drawBlurred(cam, vid, f.mask, f.maskW, f.maskH)
       draw(canvasRef.current, f.landmarks)
       if (!checker) return
-      setOut(checker(f.landmarks, stateRef.current, performance.now()))
+      setOut(checker(f.landmarks, stateRef.current, performance.now(), f.world))
     },
     // videoRef 是稳定的 ref,不用进依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -27,13 +27,13 @@ await cp(src, dest, { recursive: true })
 console.log('[setup-assets] wasm 已复制到 public/mediapipe/wasm')
 
 // 模型文件不在 npm 包里,只能下载。已经有就不重下。
-const model = join(root, 'public', 'models', 'pose_landmarker_lite.task')
+const model = join(root, 'public', 'models', 'pose_landmarker_full.task')
 try {
   await access(model)
 } catch {
   console.warn(
     '[setup-assets] 缺少姿态模型。下载:\n' +
-      '  curl -L -o public/models/pose_landmarker_lite.task \\\n' +
-      '    https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+      '  curl -L -o public/models/pose_landmarker_full.task \\\n' +
+      '    https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
   )
 }

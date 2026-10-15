@@ -29,18 +29,51 @@ export const LM = {
   rightAnkle: 28,
 } as const
 
-/** 以 b 为顶点的夹角(度)。三点重合时返回 NaN,由调用方判为不可信。 */
+/**
+ * 以 b 为顶点的夹角(度)。三点重合时返回 NaN,由调用方判为不可信。
+ *
+ * 🔴 带 z 一起算。只用 x/y 的话,角度会随摄像头机位变 ——
+ * 正对镜头拍深蹲时膝角会被投影压扁,明明蹲到位了也判"再低一点"。
+ * 传进来的点如果有 z(worldLandmarks 有),就是真正的三维夹角,与机位无关。
+ */
 export function angleDeg(a: Landmark, b: Landmark, c: Landmark): number {
   const abx = a.x - b.x
   const aby = a.y - b.y
+  const abz = (a.z ?? 0) - (b.z ?? 0)
   const cbx = c.x - b.x
   const cby = c.y - b.y
-  const dot = abx * cbx + aby * cby
-  const magA = Math.hypot(abx, aby)
-  const magC = Math.hypot(cbx, cby)
+  const cbz = (c.z ?? 0) - (b.z ?? 0)
+  const dot = abx * cbx + aby * cby + abz * cbz
+  const magA = Math.hypot(abx, aby, abz)
+  const magC = Math.hypot(cbx, cby, cbz)
   if (magA === 0 || magC === 0) return NaN
   const cos = Math.min(1, Math.max(-1, dot / (magA * magC)))
   return (Math.acos(cos) * 180) / Math.PI
+}
+
+/**
+ * 指数滑动平均,用来压关键点抖动。
+ *
+ * 为什么要平滑:模型逐帧独立推理,静止不动时关键点仍会抖 1–2 个像素,
+ * 换算成角度就是 ±3° 左右的噪声。状态机用迟滞阈值扛住了误计数,
+ * 但"最小膝角"是取整个过程的极值 —— 噪声会让它偏低,把没蹲到位的判成到位。
+ *
+ * alpha 越小越稳也越迟钝。0.5 在 30fps 下大约 2 帧收敛,肉眼觉不出延迟。
+ */
+const SMOOTH_ALPHA = 0.5
+
+export function smoothLandmarks(prev: Landmark[] | null, next: Landmark[]): Landmark[] {
+  if (!prev || prev.length !== next.length) return next
+  return next.map((n, i) => {
+    const p = prev[i]
+    return {
+      x: p.x + (n.x - p.x) * SMOOTH_ALPHA,
+      y: p.y + (n.y - p.y) * SMOOTH_ALPHA,
+      z: (p.z ?? 0) + ((n.z ?? 0) - (p.z ?? 0)) * SMOOTH_ALPHA,
+      // 可见度不平滑:它是"看不看得见"的判断依据,要立刻反应
+      visibility: n.visibility,
+    }
+  })
 }
 
 /** 两点连线相对垂直方向的倾角(度)。0 = 完全竖直,90 = 完全水平。 */

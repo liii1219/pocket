@@ -11,7 +11,12 @@
  * 没有用 3D 骨骼引擎,因为插值本身就能表达路径,而且零依赖、手机上不掉帧。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { PointMap, POINT_MAPS } from './PointMap'
+import { RIGS } from './rigs'
+
+/** three.js 有 600KB,只有进到教练屏才需要,所以拆出去按需加载。 */
+const Figure3D = lazy(() => import('./Figure3D').then((m) => ({ default: m.Figure3D })))
 
 interface Pose {
   head: [number, number]
@@ -128,10 +133,21 @@ function Figure({ pose, dim = false }: { pose: Pose; dim?: boolean }) {
 }
 
 export function MovementDiagram({ movementId }: { movementId: string }) {
+  const pointKind = POINT_MAPS[movementId]
   const f = FRAMES[movementId]
   const reduced =
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
   const t = useCycle(!reduced && !!f)
+  // 按压类动作的要点是"手指按在哪",不是身体摆成什么姿势,所以画定位图
+  if (pointKind) return <PointMap kind={pointKind} />
+  // 有三维姿势就用三维;没有的退回二维两帧,不留空
+  if (RIGS[movementId]) {
+    return (
+      <Suspense fallback={<div className="fig3d fig3d-loading">Loading the figure…</div>}>
+        <Figure3D movementId={movementId} />
+      </Suspense>
+    )
+  }
   if (!f) return null
 
   const a = POSES[f.a]

@@ -204,3 +204,29 @@ button:active { transform: scale(.985); }
   border: 1px solid var(--line); border-radius: 999px;
   padding: 9px 13px; font: inherit; font-size: 14px; max-width: 190px;
 }
+
+/* ---------- 穴位定位图 ---------- */
+.pointmap {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 16px; box-shadow: var(--shadow);
+}
+.pointmap svg { width: 150px; height: 165px; display: block; margin: 0 auto 6px; }
+.pointmap .spots {
+  margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.pointmap .spot-note {
+  color: var(--muted); font-size: 13px; margin: 10px 0 0;
+  border-left: 2px solid var(--warn); padding-left: 10px;
+}
+
+/* ---------- 三维示意小人 ---------- */
+.fig3d {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 8px 8px 4px; box-shadow: var(--shadow);
+}
+.fig3d-canvas { width: 100%; height: 230px; cursor: grab; touch-action: none; }
+.fig3d-canvas:active { cursor: grabbing; }
+.fig3d-canvas canvas { display: block; margin: 0 auto; }
+.fig3d-hint { color: var(--muted); font-size: 12px; text-align: center; margin: 0 0 6px; }
+.fig3d-loading { height: 230px; display: grid; place-items: center; color: var(--muted); font-size: 14px; }

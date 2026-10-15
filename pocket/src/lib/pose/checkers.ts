@@ -117,13 +117,16 @@ const SQUAT_TH: Thresholds = { down: 140, up: 160, depth: 110, minMs: 1200 }
  * 深蹲:髋-膝-踝夹角。侧面或斜 45° 拍最准。
  * 判两件事:蹲得够不够深(该次最小膝角)、是不是甩(单次耗时)。
  */
-export function checkSquat(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+export function checkSquat(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
+): CheckOutput {
   if (!visibleEnough(lms, SQUAT_IDX) || !insideFrame(lms, SQUAT_IDX)) {
     return { ...state, ...NOT_VISIBLE }
   }
-  const hip = mid(lms[LM.leftHip], lms[LM.rightHip])
-  const knee = mid(lms[LM.leftKnee], lms[LM.rightKnee])
-  const ankle = mid(lms[LM.leftAnkle], lms[LM.rightAnkle])
+  // 画面坐标只用来判"看不看得见"。角度一律用 world(米制三维),否则机位一变角度就偏。
+  const W = world ?? lms
+  const hip = mid(W[LM.leftHip], W[LM.rightHip])
+  const knee = mid(W[LM.leftKnee], W[LM.rightKnee])
+  const ankle = mid(W[LM.leftAnkle], W[LM.rightAnkle])
   const angle = angleDeg(hip, knee, ankle)
   if (!Number.isFinite(angle)) return { ...state, ...NOT_VISIBLE }
 
@@ -144,13 +147,15 @@ const HINGE_TH: Thresholds = { down: 140, up: 165, depth: 120, minMs: 1200 }
  * 髋铰链:肩-髋-膝夹角数次数,躯干倾角区分"推髋"和"屈膝"。
  * ⚠️ 判不了塌腰,见文件头说明。
  */
-export function checkHinge(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+export function checkHinge(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
+): CheckOutput {
   if (!visibleEnough(lms, HINGE_IDX) || !insideFrame(lms, HINGE_IDX)) {
     return { ...state, ...NOT_VISIBLE }
   }
-  const shoulder = mid(lms[LM.leftShoulder], lms[LM.rightShoulder])
-  const hip = mid(lms[LM.leftHip], lms[LM.rightHip])
-  const knee = mid(lms[LM.leftKnee], lms[LM.rightKnee])
+  const W = world ?? lms
+  const shoulder = mid(W[LM.leftShoulder], W[LM.rightShoulder])
+  const hip = mid(W[LM.leftHip], W[LM.rightHip])
+  const knee = mid(W[LM.leftKnee], W[LM.rightKnee])
   const angle = angleDeg(shoulder, hip, knee)
   if (!Number.isFinite(angle)) return { ...state, ...NOT_VISIBLE }
 
@@ -178,11 +183,13 @@ const SHOULDER_IDX = [LM.leftShoulder, LM.rightShoulder, LM.leftElbow, LM.rightE
  * 肩活动度:髋-肩-肘夹角(手臂相对躯干抬起的角度)。
  * 这里的"下位"借用为"举到顶",所以阈值方向和上面两个相反。
  */
-export function checkShoulder(lms: Landmark[], state: CheckState, t: number): CheckOutput {
+export function checkShoulder(lms: Landmark[], state: CheckState, t: number, world?: Landmark[],
+): CheckOutput {
   if (!visibleEnough(lms, SHOULDER_IDX)) return { ...state, ...NOT_VISIBLE }
-  const hip = mid(lms[LM.leftHip], lms[LM.rightHip])
-  const shoulder = mid(lms[LM.leftShoulder], lms[LM.rightShoulder])
-  const elbow = mid(lms[LM.leftElbow], lms[LM.rightElbow])
+  const W = world ?? lms
+  const hip = mid(W[LM.leftHip], W[LM.rightHip])
+  const shoulder = mid(W[LM.leftShoulder], W[LM.rightShoulder])
+  const elbow = mid(W[LM.leftElbow], W[LM.rightElbow])
   const angle = angleDeg(hip, shoulder, elbow)
   if (!Number.isFinite(angle)) return { ...state, ...NOT_VISIBLE }
 
@@ -212,7 +219,19 @@ export function checkShoulder(lms: Landmark[], state: CheckState, t: number): Ch
 
 export type CheckerId = 'squat-depth' | 'hinge-back' | 'shoulder-range'
 
-export const CHECKERS: Record<CheckerId, (lms: Landmark[], s: CheckState, t: number) => CheckOutput> = {
+/**
+ * 判定函数签名。
+ * lms   画面归一化坐标 —— 只用来判"看不看得见""在不在画面里"
+ * world 米制三维坐标 —— 角度一律用它,与机位无关。省略时退回用 lms(测试里这么用)
+ */
+export type PoseChecker = (
+  lms: Landmark[],
+  state: CheckState,
+  t: number,
+  world?: Landmark[],
+) => CheckOutput
+
+export const CHECKERS: Record<CheckerId, PoseChecker> = {
   'squat-depth': checkSquat,
   'hinge-back': checkHinge,
   'shoulder-range': checkShoulder,

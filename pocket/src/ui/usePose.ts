@@ -10,7 +10,7 @@
 
 import { FilesetResolver, PoseLandmarker, type PoseLandmarkerResult } from '@mediapipe/tasks-vision'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Landmark } from '../lib/pose/angles'
+import { smoothLandmarks, type Landmark } from '../lib/pose/angles'
 
 export type PoseStatus = 'idle' | 'loading' | 'running' | 'denied' | 'error'
 
@@ -42,10 +42,17 @@ interface UsePoseResult {
 }
 
 const WASM_PATH = `${import.meta.env.BASE_URL}mediapipe/wasm`
-const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_lite.task`
+/**
+ * 用 full 而不是 lite。lite 5.5MB / full 9.4MB,多 4MB 换明显更稳的关键点。
+ * 模型和 wasm 都在 public/ 下,首次加载后浏览器会缓存,展台断网也能跑。
+ */
+const MODEL_PATH = `${import.meta.env.BASE_URL}models/pose_landmarker_full.task`
 
 export interface FrameData {
+  /** 画面归一化坐标,用来画骨架和判"在不在画面里" */
   landmarks: Landmark[]
+  /** 米制三维坐标,以髋部为原点。角度一律用这个,与机位无关 */
+  world: Landmark[]
   /** 人像蒙版,0..1。开了虚化才有 */
   mask: Float32Array | null
   maskW: number
@@ -58,6 +65,8 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number | null>(null)
   const lastTsRef = useRef(-1)
+  const smoothRef = useRef<Landmark[] | null>(null)
+  const smoothWorldRef = useRef<Landmark[] | null>(null)
   const onFrameRef = useRef(onFrame)
   onFrameRef.current = onFrame
 
@@ -79,6 +88,8 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
     if (v) v.srcObject = null
     setStatus('idle')
     setLandmarks([])
+    smoothRef.current = null
+    smoothWorldRef.current = null
   }, [])
 
   const loop = useCallback(() => {
@@ -94,7 +105,14 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
       lastTsRef.current = ts
       try {
         const res: PoseLandmarkerResult = lm.detectForVideo(v, ts)
-        const pts = (res.landmarks?.[0] ?? []) as Landmark[]
+        const raw = (res.landmarks?.[0] ?? []) as Landmark[]
+        const rawWorld = (res.worldLandmarks?.[0] ?? []) as Landmark[]
+
+        // 平滑:模型逐帧独立推理,静止时也会抖,换算成角度就是 ±3° 的噪声
+        const pts = smoothLandmarks(smoothRef.current, raw)
+        const world = smoothLandmarks(smoothWorldRef.current, rawWorld)
+        smoothRef.current = raw.length ? pts : null
+        smoothWorldRef.current = rawWorld.length ? world : null
         setLandmarks(pts)
 
         const mp = res.segmentationMasks?.[0]
@@ -106,7 +124,7 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
           maskW = mp.width
           maskH = mp.height
         }
-        onFrameRef.current?.({ landmarks: pts, mask, maskW, maskH })
+        onFrameRef.current?.({ landmarks: pts, world, mask, maskW, maskH })
         // MPMask 持有 GPU/WASM 资源,用完必须还,否则几十帧之后就爆
         mp?.close()
       } catch {
@@ -193,6 +211,11 @@ export function usePose(onFrame?: (f: FrameData) => void, wantMask = false): Use
           baseOptions: { modelAssetPath: MODEL_PATH, delegate: 'GPU' },
           runningMode: 'VIDEO',
           numPoses: 1,
+          // 默认都是 0.5。检测门槛不动(太高会一直找不到人),
+          // 但追踪和"人还在不在"门槛提高 —— 宁可报"看不清",也不要用半可信的点去判动作。
+          minPoseDetectionConfidence: 0.5,
+          minPosePresenceConfidence: 0.65,
+          minTrackingConfidence: 0.65,
           // 人像蒙版直接从姿态模型取,不用再下一个分割模型
           outputSegmentationMasks: wantMaskRef.current,
         })
