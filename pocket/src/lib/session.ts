@@ -7,18 +7,21 @@
  * 3. 排不满就排不满。宁可给三个动作,不硬凑到把空档填死。
  */
 
-import { isAllowed, MOVEMENTS, targetsSoreArea, type BodyArea, type Movement, type Place } from './movements'
+import { isAllowed, MOVEMENTS, targetsSoreArea, type BodyArea, type Movement } from './movements'
 
-export type Energy = 'low' | 'ok' | 'good'
+/**
+ * 今天有没有劲。
+ * 🔴 原来是 low/ok/good 三档,但 ok 和 good 给出的课**一模一样** ——
+ * 三选一里有两个完全相同,那是假选择,只会让人以为自己在调什么。
+ * 实际只有一个分界:累的时候只给活动度,不给发力。
+ */
+export type Energy = 'low' | 'ok'
 
 export interface SessionInput {
   /** 空档剩余分钟 */
   minutes: number
-  place: Place
   sore: BodyArea[]
   energy: Energy
-  /** 合租/办公室等不能出声的场合 */
-  quietOnly: boolean
   /** 周围没人。false 时只给看不出来是在运动的动作 */
   alone: boolean
   /** 最多几个动作。不给就按时间自己定 */
@@ -99,8 +102,8 @@ function reasonFor(m: Movement, input: SessionInput): string {
   if (input.sore.length > 0) {
     return `Nothing in this one loads the areas you marked sore.`
   }
-  if (input.place === 'desk') {
-    return 'Done standing at the desk, in the clothes you are already wearing.'
+  if (input.sore.length === 0) {
+    return 'Done standing or sitting, in the clothes you are already wearing.'
   }
   return `Fits ${input.minutes} minutes and needs no equipment.`
 }
@@ -112,7 +115,7 @@ function reasonFor(m: Movement, input: SessionInput): string {
 export function composeSession(input: SessionInput): Session {
   const budget = Math.max(0, input.minutes * 60 - BUFFER_SECONDS)
 
-  let pool = MOVEMENTS.filter((m) => isAllowed(m, input.place, input.sore, input.quietOnly, input.alone))
+  let pool = MOVEMENTS.filter((m) => isAllowed(m, input.sore, input.alone))
 
   if (input.energy === 'low') {
     const soft = pool.filter((m) => LOW_ENERGY_PATTERNS.has(m.pattern))
@@ -244,16 +247,15 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 function headlineFor(input: SessionInput, count: number): string {
   if (count === 0) return 'Not enough time for anything useful. Take the gap off.'
-  const where = input.place === 'desk' ? 'at your desk' : input.place === 'floor' ? 'on the floor' : 'in the gym'
   // 标了很多酸痛时要说清楚课为什么变短了,否则用户只看到"少了"而不知道原因
   if (!input.alone) {
-    return `${plural(count, 'quiet movement')} ${where}. Nothing here looks like exercising.`
+    return `${plural(count, 'quiet movement')}. Nothing here looks like exercising.`
   }
   if (input.sore.length >= 3) {
-    return `${plural(count, 'gentle movement')} ${where}. You marked a lot as sore, so this is mobility only.`
+    return `${plural(count, 'gentle movement')}. You marked a lot as sore, so this is mobility only.`
   }
-  if (input.energy === 'low') return `${plural(count, 'easy movement')} ${where}. Nothing hard today.`
-  return `${plural(count, 'movement')} ${where}, about ${input.minutes} minutes.`
+  if (input.energy === 'low') return `${plural(count, 'easy movement')}. Nothing hard today.`
+  return `${plural(count, 'movement')}, about ${input.minutes} minutes.`
 }
 
 

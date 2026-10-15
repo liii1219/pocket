@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { BodyArea, Place } from './lib/movements'
+import type { BodyArea } from './lib/movements'
 import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 import { PhoneQR } from './ui/PhoneQR'
@@ -59,7 +59,6 @@ function useTheme(): [Theme, () => void] {
 export default function App() {
   const [screen, setScreen] = useState<Screen>('time')
   const [minutes, setMinutes] = useState(10)
-  const [place, setPlace] = useState<Place>('desk')
   const [energy, setEnergy] = useState<Energy>('ok')
   const [sore, setSore] = useState<BodyArea[]>([])
   const [itemIndex, setItemIndex] = useState(0)
@@ -76,8 +75,8 @@ export default function App() {
 
   /** 当前设置下排得满的最长时间。滑块上限就是它,不承诺给不出来的长度。 */
   const maxMin = useMemo(
-    () => maxSessionMinutes({ place, sore, energy, quietOnly: place !== 'gym', alone }),
-    [place, sore, energy, alone],
+    () => maxSessionMinutes({ sore, energy, alone }),
+    [sore, energy, alone],
   )
 
   /**
@@ -90,10 +89,10 @@ export default function App() {
   const session = useMemo(
     () =>
       composeSession({
-        minutes: effMinutes, place, sore, energy, quietOnly: place !== 'gym', alone,
+        minutes: effMinutes, sore, energy, alone,
         maxItems: count ?? undefined,
       }),
-    [effMinutes, place, sore, energy, alone, count],
+    [effMinutes, sore, energy, alone, count],
   )
 
   /* ------------------------------------------------------------ screens */
@@ -134,10 +133,8 @@ export default function App() {
         <h1>{session.headline}</h1>
 
         <div className="state-row">
-          <Chooser label="Where" value={place} onChange={setPlace}
-            options={[['desk', 'At my desk'], ['floor', 'On the floor'], ['gym', 'In a gym']]} />
           <Chooser label="Energy" value={energy} onChange={setEnergy}
-            options={[['low', 'Low'], ['ok', 'OK'], ['good', 'Good']]} />
+            options={[['ok', 'Normal'], ['low', 'Low today']]} />
         </div>
 
         <div className="sore">

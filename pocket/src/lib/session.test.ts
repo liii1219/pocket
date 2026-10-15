@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { composeSession, maxSessionMinutes, type SessionInput } from './session'
+import { MOVEMENTS } from './movements'
 
-const base: SessionInput = { minutes: 15, place: 'desk', sore: [], energy: 'ok', quietOnly: true, alone: true }
+const base: SessionInput = { minutes: 15, sore: [], energy: 'ok', alone: true }
 
 describe('composeSession', () => {
   it('同样的输入给同样的输出(可复现,不随机)', () => {
@@ -20,11 +21,6 @@ describe('composeSession', () => {
     const s = composeSession({ ...base, minutes: 1 })
     expect(s.items).toHaveLength(0)
     expect(s.headline).toMatch(/Take the gap off/)
-  })
-
-  it('办公桌场合只给能穿上班衣服做的动作', () => {
-    const s = composeSession({ ...base, place: 'desk' })
-    expect(s.items.every((i) => i.movement.workClothes)).toBe(true)
   })
 
   it('报了酸痛的部位不会被压到', () => {
@@ -71,11 +67,6 @@ describe('composeSession', () => {
     const s = composeSession({ ...base, minutes: 20 })
     const firstHasCheck = Boolean(s.items[0]?.movement.poseCheck)
     expect(firstHasCheck).toBe(true)
-  })
-
-  it('地板场合允许需要地面的动作', () => {
-    const s = composeSession({ ...base, minutes: 30, place: 'floor' })
-    expect(s.items.length).toBeGreaterThan(0)
   })
 
   /* --- 酸痛过滤:标得越多不该拿得越少 ------------------------------- */
@@ -267,7 +258,7 @@ describe('composeSession', () => {
     // 回归:滑块固定给到二十分钟,但有人在场只排得出十分钟,
     // 于是允许你选二十、再回头道歉说"剩十分钟"。承诺给不出来的数字不如不承诺。
     for (const alone of [true, false]) {
-      const ctx = { place: 'desk' as const, sore: [], energy: 'ok' as const, quietOnly: true, alone }
+      const ctx = { sore: [], energy: 'ok' as const, alone }
       const max = maxSessionMinutes(ctx)
       const s = composeSession({ ...ctx, minutes: max })
       expect(max - s.estimatedMinutes).toBeLessThanOrEqual(2)
@@ -275,13 +266,13 @@ describe('composeSession', () => {
   })
 
   it('一个人时上限更长 —— 这正是这个数字该传达的信息', () => {
-    const ctx = { place: 'desk' as const, sore: [], energy: 'ok' as const, quietOnly: true }
+    const ctx = { sore: [], energy: 'ok' as const }
     expect(maxSessionMinutes({ ...ctx, alone: true }))
       .toBeGreaterThan(maxSessionMinutes({ ...ctx, alone: false }))
   })
 
   it('标了很多酸痛时上限会缩短', () => {
-    const ctx = { place: 'desk' as const, energy: 'ok' as const, quietOnly: true, alone: true }
+    const ctx = { energy: 'ok' as const, alone: true }
     const healthy = maxSessionMinutes({ ...ctx, sore: [] })
     const achy = maxSessionMinutes({ ...ctx, sore: ['shoulder', 'back', 'hip', 'knee'] })
     expect(achy).toBeLessThan(healthy)
@@ -289,7 +280,7 @@ describe('composeSession', () => {
 
   it('上限至少是 1,不会给出 0 分钟', () => {
     const ctx = {
-      place: 'desk' as const, energy: 'ok' as const, quietOnly: true, alone: false,
+      energy: 'ok' as const, alone: false,
       sore: ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', 'wrist'] as const,
     }
     expect(maxSessionMinutes({ ...ctx, sore: [...ctx.sore] })).toBeGreaterThanOrEqual(1)
@@ -300,7 +291,7 @@ describe('composeSession', () => {
   it('"多给时间能解决"才报 time,否则报 pool', () => {
     // 回归:安静模式要十一个、不重复的只有十个,却报"十分钟里只放得下十个",
     // 让人去加时间 —— 加了也没用,卡住的是去重规则。
-    const quiet = { ...base, place: 'desk' as const, alone: false }
+    const quiet = { ...base, alone: false }
     const max = maxSessionMinutes(quiet)
     const s = composeSession({ ...quiet, minutes: max, maxItems: 30 })
     expect(s.shortfall).toBe('pool')
@@ -329,13 +320,36 @@ describe('composeSession', () => {
     // 回归:上限用取整后的分钟算,耗时 550 秒报 10 分钟,
     // 但 10 分钟的预算只有 540 秒 —— 拉到头仍然少一个动作。
     for (const alone of [true, false]) {
-      for (const energy of ['low', 'ok', 'good'] as const) {
-        const ctx = { place: 'desk' as const, sore: [], energy, quietOnly: true, alone }
+      for (const energy of ['low', 'ok'] as const) {
+        const ctx = { sore: [], energy, alone }
         const max = maxSessionMinutes(ctx)
         const atMax = composeSession({ ...ctx, minutes: max })
         const uncapped = composeSession({ ...ctx, minutes: 60 })
         expect(atMax.items.length).toBe(uncapped.items.length)
       }
+    }
+  })
+
+  /* --- 每个选项都必须真的改变结果 ----------------------------------- */
+
+  it('两个精力档给出不同的课', () => {
+    // 回归:原来是 low/ok/good 三档,ok 和 good 给的课一字不差 ——
+    // 三选一里有两个相同,那是假选择。删掉一个之后这条守住剩下两个确实不同。
+    const low = composeSession({ ...base, minutes: 12, energy: 'low' })
+    const ok = composeSession({ ...base, minutes: 12, energy: 'ok' })
+    expect(low.items.map((i) => i.movement.id)).not.toEqual(ok.items.map((i) => i.movement.id))
+  })
+
+  it('动作库里每一个都穿着上班衣服做得了 —— 这是入选门槛,不是筛选条件', () => {
+    // 原来每个动作带 workClothes/noise/space 三个字段,但全库取值一致,
+    // 字段不区分任何东西,只是把"每条都满足"重复二十遍。
+    // 唯一的例外(跪姿拉伸)和"穿你身上的衣服做"冲突,已经删掉。
+    // 这条守住:别再往库里加做不到的动作。
+    expect(MOVEMENTS.length).toBeGreaterThan(15)
+    for (const m of MOVEMENTS) {
+      expect(m.cues).toHaveLength(2)
+      expect(m.stopIf.length).toBeGreaterThan(10)
+      expect(m.reps != null || m.seconds != null).toBe(true)
     }
   })
 })

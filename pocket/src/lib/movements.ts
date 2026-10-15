@@ -8,7 +8,6 @@
  * - poseCheck: 有没有对应的摄像头判定器。没有的动作不会假装能检查。
  */
 
-export type Place = 'desk' | 'floor' | 'gym'
 export type BodyArea = 'neck' | 'shoulder' | 'back' | 'hip' | 'knee' | 'ankle' | 'wrist'
 export type Pattern = 'squat' | 'hinge' | 'push' | 'pull' | 'mobility' | 'carry'
 export type PoseCheckId =
@@ -43,10 +42,6 @@ export interface Movement {
   /** 最多两个提示词 —— 屏幕上一次只显示这两个 */
   cues: [string, string]
   pattern: Pattern
-  places: Place[]
-  noise: 'quiet' | 'any'
-  space: 'none' | 'small'
-  workClothes: boolean
   /** 这个动作主要压到哪些部位。用户报了酸痛就避开。 */
   loads: BodyArea[]
   /** 周围有人时能不能做,见 Visibility */
@@ -61,16 +56,23 @@ export interface Movement {
   stopIf: string
 }
 
+/**
+ * 入选标准(每一条都是从访谈里来的约束,不是口味):
+ * - 穿着上班的衣服能做。受访者说门槛在"换衣服"那一步,所以不能有例外。
+ * - 站着或坐着就行,不需要地面、不需要器材。
+ * - 不出声,共用办公室里能做。
+ *
+ * 🔴 这些原来是每个动作上的字段,但全库取值一致 —— 字段不区分任何东西,
+ * 只是把"每条都满足"重复二十遍。唯一的例外是个跪姿拉伸,
+ * 它 workClothes: false,和首页那句"穿着你身上的衣服做"直接冲突,已经删掉。
+ * 现在它们是入选门槛,写在这里一次。
+ */
 export const MOVEMENTS: Movement[] = [
   {
     id: 'chair-squat',
     name: 'Chair squat',
     cues: ['Sit back', 'Chest up'],
     pattern: 'squat',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['knee', 'hip'],
     visibility: 'obvious',
     reps: 10,
@@ -83,10 +85,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Standing hip hinge',
     cues: ['Push hips back', 'Flat back'],
     pattern: 'hinge',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['back', 'hip'],
     visibility: 'obvious',
     reps: 8,
@@ -99,10 +97,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Wall push-up',
     cues: ['Elbows in', 'Body in a line'],
     pattern: 'push',
-    places: ['desk', 'floor'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['shoulder', 'wrist'],
     visibility: 'obvious',
     reps: 10,
@@ -115,10 +109,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Doorway row',
     cues: ['Squeeze shoulder blades', 'Slow return'],
     pattern: 'pull',
-    places: ['desk', 'floor'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['back', 'shoulder'],
     visibility: 'obvious',
     reps: 10,
@@ -131,10 +121,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Shoulder openers',
     cues: ['Slow', 'Full range'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['shoulder'],
     visibility: 'discreet',
     seconds: 40,
@@ -147,10 +133,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Neck release',
     cues: ['Ear to shoulder', 'Breathe out'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['neck'],
     visibility: 'discreet',
     seconds: 40,
@@ -159,29 +141,10 @@ export const MOVEMENTS: Movement[] = [
     stopIf: 'Stop if anything shoots down your arm.',
   },
   {
-    id: 'hip-flexor-stretch',
-    name: 'Half-kneeling hip stretch',
-    cues: ['Tuck the tail', 'Stand tall'],
-    pattern: 'mobility',
-    places: ['floor', 'gym'],
-    noise: 'quiet',
-    space: 'small',
-    workClothes: false,
-    loads: ['hip', 'knee'],
-    visibility: 'obvious',
-    seconds: 60,
-    costSeconds: 75,
-    stopIf: 'Stop if your knee hurts on the floor.',
-  },
-  {
     id: 'calf-raise',
     name: 'Calf raise',
     cues: ['Up slow', 'Down slower'],
     pattern: 'carry',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['ankle'],
     visibility: 'discreet',
     reps: 15,
@@ -193,10 +156,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Eye exercises',
     cues: ['Look far, then near', 'Blink fully'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: [],
     visibility: 'discreet',
     seconds: 60,
@@ -208,10 +167,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Neck pressure points',
     cues: ['Thumbs at the base of the skull', 'Press, hold, release'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['neck'],
     visibility: 'discreet',
     seconds: 45,
@@ -223,10 +178,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Seated twist',
     cues: ['Reach across your body', 'Turn from the ribs'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['back'],
     visibility: 'discreet',
     seconds: 40,
@@ -239,10 +190,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Wrist and forearm stretch',
     cues: ['Fingers down, then up', 'Elbow straight'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['wrist'],
     visibility: 'discreet',
     seconds: 40,
@@ -254,10 +201,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Ankle circles',
     cues: ['Draw a slow circle', 'Both directions'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['ankle'],
     visibility: 'discreet',
     seconds: 40,
@@ -269,10 +212,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Seated march',
     cues: ['Lift from the hip', 'Sit tall, do not lean'],
     pattern: 'carry',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['hip'],
     visibility: 'discreet',
     reps: 20,
@@ -284,10 +223,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Seated glute squeeze',
     cues: ['Squeeze, hold five', 'Keep breathing'],
     pattern: 'hinge',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['hip'],
     visibility: 'discreet',
     reps: 10,
@@ -299,10 +234,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Chin tucks',
     cues: ['Slide the chin back', 'Eyes stay level'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['neck'],
     visibility: 'discreet',
     reps: 10,
@@ -314,10 +245,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Shoulder blade squeeze',
     cues: ['Blades together and down', 'Hold three'],
     pattern: 'pull',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['back', 'shoulder'],
     visibility: 'discreet',
     reps: 12,
@@ -329,10 +256,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Seated side bend',
     cues: ['Reach long, not down', 'One side at a time'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['back'],
     visibility: 'discreet',
     seconds: 40,
@@ -344,10 +267,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Shoulder shrugs',
     cues: ['Up to the ears', 'Drop, do not lower'],
     pattern: 'carry',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['shoulder', 'neck'],
     visibility: 'discreet',
     poseCheck: 'shoulder-shrug',
@@ -360,10 +279,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Arm raises to the side',
     cues: ['Lead with the elbows', 'Stop at shoulder height'],
     pattern: 'push',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     loads: ['shoulder'],
     visibility: 'discreet',
     poseCheck: 'arm-raise',
@@ -376,10 +291,6 @@ export const MOVEMENTS: Movement[] = [
     name: 'Reach the circles',
     cues: ['Touch it with either hand', 'Reach, do not lean'],
     pattern: 'mobility',
-    places: ['desk', 'floor', 'gym'],
-    noise: 'quiet',
-    space: 'none',
-    workClothes: true,
     // 肩 + 上背:去重键要和 Shoulder openers(只有 shoulder)区分开,
     // 否则两个同属 mobility:shoulder,这个最可靠的判定器反而排不进课表
     loads: ['shoulder', 'back'],
@@ -395,24 +306,11 @@ export function byId(id: string): Movement | undefined {
   return MOVEMENTS.find((m) => m.id === id)
 }
 
-/** 这个动作在这个场合能不能做。🔴 只做排除,不做打分 —— 打分在 session 层。 */
-export function isAllowed(
-  m: Movement,
-  place: Place,
-  sore: BodyArea[],
-  quietOnly: boolean,
-  alone = true,
-): boolean {
-  if (!m.places.includes(place)) return false
-  if (place === 'desk' && !m.workClothes) return false
-  if (quietOnly && m.noise !== 'quiet') return false
+/** 这个动作现在能不能做。只剩两条真正会变的条件:周围有没有人、哪里酸。 */
+export function isAllowed(m: Movement, sore: BodyArea[], alone = true): boolean {
   // 周围有人时只给看不出来是在运动的动作
   if (!alone && m.visibility !== 'discreet') return false
-  // 🔴 酸痛 ≠ 不能动。区别在于是"加负荷"还是"活动开":
-  //   力量/负重动作压到酸痛部位  → 排除
-  //   活动度动作针对酸痛部位      → 恰恰是该做的,保留
-  // 一刀切会把 Shoulder openers 这种专门给肩膀做的动作也排掉,
-  // 结果用户标得越诚实,拿到的动作越少 —— 这是在惩罚认真填的人。
+  // 🔴 酸痛 ≠ 不能动:力量动作压到酸痛部位要排除,活动度动作针对酸痛部位恰恰该做
   if (m.pattern !== 'mobility' && m.loads.some((a) => sore.includes(a))) return false
   return true
 }
