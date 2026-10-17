@@ -32,14 +32,11 @@ export type PoseCheckId =
  * 这一维是用户测试逼出来的:受访者说办公室有人时不做显眼的动作,没人时什么都做。
  * 门槛不是办公室、也不是运动本身,是"被看见",而且取决于做哪个动作。
  *
- * 判据只有一条:**会不会改变你的轮廓**。
- *   discreet — 人还在椅子上或原地站着,动的是头、手、肩、脚踝。
+ * 判据只有一条:**会不会改变你的轮廓 (Zero-Displacement)**。
+ *   discreet — 人还在椅子上或原地站着,动的是头、手、肩、脚踝,或进行零位移的等长收缩。
  *              隔着办公室看过去,和"坐在工位上"没有区别。
- *   obvious  — 要离开椅子、改变整个身体的形状:蹲下去、从髋折叠、撑墙、拉门框。
+ *   obvious  — 要离开椅子、改变整个身体的形状:挥舞手臂、躯干大幅度弯曲扭转、下蹲起伏。
  *              远处一眼就是"那人在运动"。
- *
- * 注意不是"吵不吵"。库里每个动作都不出声,所以声音这一维不区分任何东西,
- * 原来的 noise 字段已经删掉了。
  */
 export type Visibility = 'discreet' | 'obvious'
 
@@ -63,18 +60,8 @@ export interface Movement {
   stopIf: string
 }
 
-/**
- * 入选标准(每一条都是从访谈里来的约束,不是口味):
- * - 穿着上班的衣服能做。受访者说门槛在"换衣服"那一步,所以不能有例外。
- * - 站着或坐着就行,不需要地面、不需要器材。
- * - 不出声,共用办公室里能做。
- *
- * 🔴 这些原来是每个动作上的字段,但全库取值一致 —— 字段不区分任何东西,
- * 只是把"每条都满足"重复二十遍。唯一的例外是个跪姿拉伸,
- * 它 workClothes: false,和首页那句"穿着你身上的衣服做"直接冲突,已经删掉。
- * 现在它们是入选门槛,写在这里一次。
- */
 export const MOVEMENTS: Movement[] = [
+  // ================= 显眼动作 (Full Movement / Obvious) =================
   {
     id: 'chair-squat',
     name: 'Chair squat',
@@ -129,23 +116,11 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Slow', 'Full range'],
     pattern: 'mobility',
     loads: ['shoulder'],
-    visibility: 'discreet',
+    visibility: 'obvious', // 挥舞手臂,显眼
     seconds: 40,
     costSeconds: 55,
     poseCheck: 'reach-high',
     stopIf: 'Stop if it pinches at the top.',
-  },
-  {
-    id: 'neck-release',
-    name: 'Neck release',
-    cues: ['Ear to shoulder', 'Breathe out'],
-    pattern: 'mobility',
-    loads: ['neck'],
-    visibility: 'discreet',
-    seconds: 40,
-    costSeconds: 50,
-    poseCheck: 'head-target',
-    stopIf: 'Stop if anything shoots down your arm.',
   },
   {
     id: 'calf-raise',
@@ -153,10 +128,83 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Up slow', 'Down slower'],
     pattern: 'carry',
     loads: ['ankle'],
-    visibility: 'discreet',
+    visibility: 'obvious', // 身体整体起伏,显眼
     reps: 15,
     costSeconds: 60,
     stopIf: 'Stop if your achilles stings.',
+  },
+  {
+    id: 'seated-twist',
+    name: 'Seated twist',
+    cues: ['Reach across your body', 'Turn from the ribs'],
+    pattern: 'mobility',
+    loads: ['back'],
+    visibility: 'obvious', // 躯干大幅度扭转,显眼
+    seconds: 40,
+    costSeconds: 45,
+    poseCheck: 'reach-cross',
+    stopIf: 'Stop if it pinches in the lower back rather than stretching.',
+  },
+  {
+    id: 'seated-march',
+    name: 'Seated march',
+    cues: ['Lift from the hip', 'Sit tall, do not lean'],
+    pattern: 'carry',
+    loads: ['hip'],
+    visibility: 'obvious', // 类似高抬腿,显眼
+    reps: 20,
+    costSeconds: 55,
+    stopIf: 'Stop if your lower back starts doing the work.',
+  },
+  {
+    id: 'side-bend',
+    name: 'Seated side bend',
+    cues: ['Reach long, not down', 'One side at a time'],
+    pattern: 'mobility',
+    loads: ['back'],
+    visibility: 'obvious', // 躯干侧面大幅度倾斜,显眼
+    seconds: 40,
+    costSeconds: 45,
+    stopIf: 'Stop if anything pinches in the lower back.',
+  },
+  {
+    id: 'lateral-raise',
+    name: 'Arm raises to the side',
+    cues: ['Lead with the elbows', 'Stop at shoulder height'],
+    pattern: 'push',
+    loads: ['shoulder'],
+    visibility: 'obvious', // 手臂大幅度外展,显眼
+    poseCheck: 'arm-raise',
+    reps: 12,
+    costSeconds: 55,
+    stopIf: 'Stop if the shoulder pinches as you pass halfway.',
+  },
+  {
+    id: 'reach-dots',
+    name: 'Reach the circles',
+    cues: ['Touch it with either hand', 'Reach, do not lean'],
+    pattern: 'mobility',
+    loads: ['shoulder', 'back'],
+    visibility: 'obvious', // 空中乱点,非常显眼
+    poseCheck: 'reach-target',
+    reps: 12,
+    costSeconds: 52,
+    stopIf: 'Stop if your shoulder pinches as you reach high.',
+  },
+
+  // ================= 隐蔽微运动 (Discreet Microbreaks) =================
+  // 以下动作符合 Zero-Displacement 或仅有面部/末端关节微动
+  {
+    id: 'neck-release',
+    name: 'Neck release',
+    cues: ['Ear to shoulder', 'Breathe out'],
+    pattern: 'mobility',
+    loads: ['neck'],
+    visibility: 'discreet', // 仅歪头,类似思考
+    seconds: 40,
+    costSeconds: 50,
+    poseCheck: 'head-target',
+    stopIf: 'Stop if anything shoots down your arm.',
   },
   {
     id: 'eye-exercises',
@@ -175,22 +223,10 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Thumbs at the base of the skull', 'Press, hold, release'],
     pattern: 'mobility',
     loads: ['neck'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 类似揉脖子放松
     seconds: 45,
     costSeconds: 50,
     stopIf: 'Press firmly, never sharply. Stop if it feels pointed rather than dull.',
-  },
-  {
-    id: 'seated-twist',
-    name: 'Seated twist',
-    cues: ['Reach across your body', 'Turn from the ribs'],
-    pattern: 'mobility',
-    loads: ['back'],
-    visibility: 'discreet',
-    seconds: 40,
-    costSeconds: 45,
-    poseCheck: 'reach-cross',
-    stopIf: 'Stop if it pinches in the lower back rather than stretching.',
   },
   {
     id: 'wrist-stretch',
@@ -198,7 +234,7 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Fingers down, then up', 'Elbow straight'],
     pattern: 'mobility',
     loads: ['wrist'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 桌面下方即可完成
     seconds: 40,
     costSeconds: 45,
     stopIf: 'Stop if you feel pins and needles in your fingers.',
@@ -209,21 +245,10 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Draw a slow circle', 'Both directions'],
     pattern: 'mobility',
     loads: ['ankle'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 桌底动作,完全隐蔽
     seconds: 40,
     costSeconds: 45,
     stopIf: 'Stop if the ankle clicks painfully rather than just stiffly.',
-  },
-  {
-    id: 'seated-march',
-    name: 'Seated march',
-    cues: ['Lift from the hip', 'Sit tall, do not lean'],
-    pattern: 'carry',
-    loads: ['hip'],
-    visibility: 'discreet',
-    reps: 20,
-    costSeconds: 55,
-    stopIf: 'Stop if your lower back starts doing the work.',
   },
   {
     id: 'glute-squeeze',
@@ -231,7 +256,7 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Squeeze, hold five', 'Keep breathing'],
     pattern: 'hinge',
     loads: ['hip'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 零位移等长收缩
     reps: 10,
     costSeconds: 50,
     stopIf: 'Stop if you get cramp.',
@@ -242,7 +267,7 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Slide the chin back', 'Eyes stay level'],
     pattern: 'mobility',
     loads: ['neck'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 极小幅度颈部微动
     reps: 10,
     costSeconds: 45,
     stopIf: 'Stop if it brings on a headache.',
@@ -253,21 +278,10 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Blades together and down', 'Hold three'],
     pattern: 'pull',
     loads: ['back', 'shoulder'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 极小幅度肩胛微动
     reps: 12,
     costSeconds: 50,
     stopIf: 'Stop if you feel it in your neck instead of between the blades.',
-  },
-  {
-    id: 'side-bend',
-    name: 'Seated side bend',
-    cues: ['Reach long, not down', 'One side at a time'],
-    pattern: 'mobility',
-    loads: ['back'],
-    visibility: 'discreet',
-    seconds: 40,
-    costSeconds: 45,
-    stopIf: 'Stop if anything pinches in the lower back.',
   },
   {
     id: 'shoulder-shrug',
@@ -275,37 +289,66 @@ export const MOVEMENTS: Movement[] = [
     cues: ['Up to the ears', 'Drop, do not lower'],
     pattern: 'carry',
     loads: ['shoulder', 'neck'],
-    visibility: 'discreet',
+    visibility: 'discreet', // 正常放松动作
     poseCheck: 'shoulder-shrug',
     reps: 12,
     costSeconds: 50,
     stopIf: 'Stop if it tightens into your neck instead of releasing.',
   },
   {
-    id: 'lateral-raise',
-    name: 'Arm raises to the side',
-    cues: ['Lead with the elbows', 'Stop at shoulder height'],
+    id: 'desk-leg-press',
+    name: 'Desk-Under Leg Press',
+    cues: ['Press thighs up against desk', 'Push hands down on thighs'],
     pattern: 'push',
-    loads: ['shoulder'],
-    visibility: 'discreet',
-    poseCheck: 'arm-raise',
-    reps: 12,
-    costSeconds: 55,
-    stopIf: 'Stop if the shoulder pinches as you pass halfway.',
+    loads: ['knee', 'hip'],
+    visibility: 'discreet', // 桌底零位移抗阻
+    seconds: 10,
+    costSeconds: 20,
+    stopIf: 'Stop if your desk is unstable or your knees feel sharp pressure.',
   },
   {
-    id: 'reach-dots',
-    name: 'Reach the circles',
-    cues: ['Touch it with either hand', 'Reach, do not lean'],
+    id: 'prayer-press',
+    name: 'Prayer Press',
+    cues: ['Palms together at chest', 'Press firmly inward'],
+    pattern: 'push',
+    loads: ['shoulder', 'wrist'],
+    visibility: 'discreet', // 胸前零位移抗阻
+    seconds: 10,
+    costSeconds: 20,
+    stopIf: 'Stop if you feel pinching in your wrists.',
+  },
+  {
+    id: 'pelvic-tilt',
+    name: 'Seated Pelvic Tilt',
+    cues: ['Tilt pelvis back slightly', 'Release lower back tension'],
     pattern: 'mobility',
-    // 肩 + 上背:去重键要和 Shoulder openers(只有 shoulder)区分开,
-    // 否则两个同属 mobility:shoulder,这个最可靠的判定器反而排不进课表
-    loads: ['shoulder', 'back'],
-    visibility: 'discreet',
-    poseCheck: 'reach-target',
-    reps: 12,
-    costSeconds: 52,
-    stopIf: 'Stop if your shoulder pinches as you reach high.',
+    loads: ['back', 'hip'],
+    visibility: 'discreet', // 极小幅度骨盆微动
+    reps: 10,
+    costSeconds: 40,
+    stopIf: 'Stop if you feel sharp pain in the lumbar spine.',
+  },
+  {
+    id: 'palming',
+    name: 'Palming for Eyes',
+    cues: ['Rub hands to warm', 'Cover closed eyes gently'],
+    pattern: 'mobility',
+    loads: [],
+    visibility: 'discreet', // 视疲劳舒缓,类似闭目养神
+    seconds: 30,
+    costSeconds: 40,
+    stopIf: 'Stop if you are pressing directly on your eyeballs.',
+  },
+  {
+    id: 'focal-shift',
+    name: '20-20-20 Focal Shift',
+    cues: ['Look 20 feet away', 'Rest your eye focus'],
+    pattern: 'mobility',
+    loads: [],
+    visibility: 'discreet', // 视疲劳舒缓,仅眼球运动
+    seconds: 20,
+    costSeconds: 30,
+    stopIf: 'Stop if your vision becomes heavily blurred.',
   },
 ]
 

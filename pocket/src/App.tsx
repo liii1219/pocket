@@ -178,6 +178,20 @@ export default function App() {
 
   return (
     <main className="wrap">
+      <button 
+        className="back" 
+        onClick={() => {
+          const landing = document.getElementById('landing')
+          const root = document.getElementById('root')
+          if (landing && root) {
+            landing.style.display = 'flex' // 重新显示引导页
+            root.style.display = 'none'    // 隐藏当前的 React 界面
+          }
+        }}
+      >
+        ← Back
+      </button>
+
       <div className="topbar">
         <h1>Pocket</h1>
         <button className="theme-toggle" onClick={toggleTheme}>
@@ -233,19 +247,21 @@ export default function App() {
       </div>
 
       <div className="field">
-        <span className="label">Anyone around?</span>
+        <span className="label">Exercise Style & Privacy</span>
         <div className="chips">
+          {/* alone = false 对应只给 discreet 动作 */}
           <button className={!alone ? 'chip on' : 'chip'} onClick={() => setAlone(false)}>
-            People nearby
+            Discreet Microbreaks
           </button>
+          {/* alone = true 对应允许 obvious 动作 */}
           <button className={alone ? 'chip on' : 'chip'} onClick={() => setAlone(true)}>
-            Just me
+            Full Movement
           </button>
         </div>
         <p className="alone-hint">
           {alone
-            ? 'You get the full session, including the ones that need you out of your chair.'
-            : 'You stay in your chair. Nothing changes your outline enough to notice.'}
+            ? 'Includes larger movements (like squats) that require standing up and changing your outline.'
+            : 'Zero-displacement isometric contractions and micro-stretches. Completely unnoticeable in an open-plan office.'}
         </p>
       </div>
 

@@ -5,8 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
     <meta name="theme-color" content="#12161c" />
     <title>Pocket</title>
+    <style>
+      /* 引导页专属样式，绝对不影响后面的 React 界面 */
+      #landing {
+        position: fixed; inset: 0; background: var(--bg, #f7f8fa); color: var(--ink, #1a1f26);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 24px; z-index: 9999; font-family: -apple-system, sans-serif; text-align: center;
+      }
+      @media (prefers-color-scheme: dark) {
+        #landing { background: #12161c; color: #eef2f6; }
+        #landing .card { background: #1b212a; border-color: #2b3440; }
+      }
+      #landing .hero { max-width: 560px; width: 100%; }
+      #landing h1 { font-size: 40px; margin: 0 0 16px; font-weight: 750; }
+      #landing p.sub { color: #68727f; margin: 0 auto 40px; font-size: 18px; line-height: 1.5; }
+      #landing .card { background: #fff; border: 1px solid #e2e6ec; border-radius: 20px; padding: 40px; text-align: left; box-shadow: 0 12px 24px rgba(0,0,0,0.05); }
+      #landing ul { list-style: none; padding: 0; margin: 0 0 36px; display: flex; flex-direction: column; gap: 16px; }
+      #landing li { display: flex; align-items: flex-start; gap: 12px; font-size: 15px; line-height: 1.5; }
+      #landing svg.icon { width: 20px; height: 20px; color: #1f8f6b; flex-shrink: 0; margin-top: 2px; }
+      #landing button { width: 100%; background: #1f8f6b; color: #fff; border: none; padding: 18px; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+      #landing button:active { transform: scale(0.98); }
+      
+      /* 核心机制：默认隐藏 React 界面，防止一开始就露出来 */
+      #root { display: none; }
+    </style>
   </head>
   <body>
+    <!-- 第一层：你想要的引导页 -->
+    <div id="landing">
+      <div class="hero">
+        <h1>Pocket</h1>
+        <p class="sub">Exercise in the gaps of a working day. Say how many minutes you have, get one short session that fits.</p>
+        <div class="card">
+          <ul>
+            <li>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              <span><strong>Smart Form Check:</strong> Uses your camera to count reps and provide real-time guidance.</span>
+            </li>
+            <li>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span><strong>Context Aware:</strong> Tell it if people are around, and it only offers discreet stretching.</span>
+            </li>
+            <li>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <span><strong>100% Private:</strong> The pose model runs entirely in your browser. No video is ever uploaded.</span>
+            </li>
+          </ul>
+          
+          <!-- 最简单的跳转逻辑：点一下，隐藏自己，把 React 显示出来 -->
+          <button onclick="document.getElementById('landing').style.display='none'; document.getElementById('root').style.display='block';">
+            Launch Pocket
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二层：React 真正的容器（这部分绝不能删） -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

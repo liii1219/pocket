@@ -1,10 +1,10 @@
 /**
  * CameraCoach — 一次一个动作的摄像头页面。
  *
- * 界面规则(来自访谈,不是审美偏好):
- * - 屏幕上一次只有一个动作、两个提示词、一条反馈。
- * - 不显示分数、不显示历史、不显示任何用户看不懂的数字。
- * - 系统不确定时直接说"看不清",不猜。
+ * 核心升级：
+ * 1. 倒计时与节拍器均加入 4 秒"开场白缓冲"，等语音介绍完、用户摆好姿势再开始计时。
+ * 2. 自动节拍器：每 3.5 秒报一次数。
+ * 3. 智能穿插：在第 2 次和第 4 次自动重申动作指导 (cues)，逢 3 随机鼓励。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -39,29 +39,34 @@ interface Props {
 
 export function CameraCoach({ movement, onDone, onSkip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  /** 虚化后的画面画在这张上,开虚化时它盖住 <video> */
   const camCanvasRef = useRef<HTMLCanvasElement>(null)
   const [blur, setBlur] = useState(true)
-  /**
-   * 虚化实际走了哪条路。
-   * 'mask' = 用了分割蒙版(最准),'outline' = 蒙版没用,退回关键点框,
-   * 'none' = 两条都不成立,画的是原帧。
-   * 🔴 把它显示出来是因为"按钮开着但画面没糊"已经出现三次,
-   * 每次都只能靠猜。现在它自己说。
-   */
+  
+  const [voiceOn, setVoiceOn] = useState(true)
+  const [manualMode, setManualMode] = useState(false)
+  const [manualRep, setManualRep] = useState(0)
+
   const [blurMode, setBlurMode] = useState<'mask' | 'outline' | 'none'>('none')
   const stateRef = useRef<CheckState>(initState())
   const [out, setOut] = useState<CheckOutput | null>(null)
 
-  /**
-   * 🔴 换动作时清零。
-   * App 渲染 CameraCoach 时没给 key,所以换动作时 React 复用同一个组件实例,
-   * 而 useRef(initState()) 只在首次挂载跑一次 —— 次数会从上一个动作接着数。
-   * 这里不用 key 强制重挂载,因为那会把摄像头流一起拆掉,每换一个动作都要重开一次。
-   */
+  const lastSpokenCue = useRef<string | null>(null)
+  const lastSpokenRep = useRef<number>(-1)
+  const timeUpSpoken = useRef<boolean>(false)
+  const announcedIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     stateRef.current = initState()
     setOut(null)
+    setManualMode(false)
+    setManualRep(0)
+    lastSpokenCue.current = null
+    lastSpokenRep.current = -1
+    timeUpSpoken.current = false
+    
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
   }, [movement.id])
 
   const checker = movement.poseCheck ? CHECKERS[movement.poseCheck] : null
@@ -77,19 +82,11 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       }
       draw(canvasRef.current, f.landmarks, stateRef.current, movement.poseCheck)
       if (!checker) return
-      /**
-       * 🔴 必须把新状态写回 ref。
-       * 之前只把 stateRef.current 传进去、却没接住返回值,等于每一帧都从初始状态重算:
-       * phase 永远停在 'up',走不完 up→down→up,次数永远是 0;
-       * 基线采样数也每帧归零,"正在学习静息位置"的提示永远不消失。
-       * CheckOutput 继承自 CheckState,所以可以直接当作下一帧的输入。
-       */
+      
       const next = checker(f.landmarks, stateRef.current, performance.now(), f.world)
       stateRef.current = next
       setOut(next)
     },
-    // videoRef 是稳定的 ref,不用进依赖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [checker, blur],
   )
 
@@ -98,25 +95,155 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     cameras, cameraId, pickCamera, canZoom, widen, refreshCameras, rawCameraCount,
   } = usePose(handleFrame, blur)
 
-  const reps = out?.reps ?? 0
-  const done = target > 0 && reps >= target
+  const isRunning = status === 'running'
+  const isManual = !checker || manualMode
+  const shouldRunTimer = isRunning || isManual
 
-  /**
-   * 保持类动作(有 seconds 没有 reps)显示倒计时,不显示次数。
-   * 🔴 之前一律显示次数:坐姿转体是 40 秒的保持动作,左右各转一次就加 2,
-   * 四十秒下来变成"23",用户不知道这个数字是什么意思,也没有上限。
-   */
+  useEffect(() => {
+    if (manualMode && out?.reps) {
+      setManualRep(out.reps)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualMode])
+
+  const timed = movement.seconds != null && movement.reps == null
   const [left, setLeft] = useState(movement.seconds ?? 0)
+  
   useEffect(() => {
     setLeft(movement.seconds ?? 0)
   }, [movement.id, movement.seconds])
-  useEffect(() => {
-    if (!movement.seconds || status !== 'running') return
-    const id = setInterval(() => setLeft((v) => (v > 0 ? v - 1 : 0)), 1000)
-    return () => clearInterval(id)
-  }, [movement.id, movement.seconds, status])
 
-  const timed = movement.seconds != null && movement.reps == null
+  // 🔴 倒计时引擎：加入了 4 秒延时缓冲，等开场白说完再扣时间
+  useEffect(() => {
+    if (!movement.seconds || !shouldRunTimer) return
+    let timerId: number
+    const delayId = setTimeout(() => {
+      timerId = window.setInterval(() => setLeft((v) => (v > 0 ? v - 1 : 0)), 1000)
+    }, 4000) // 等待 4 秒开场白
+    
+    return () => {
+      clearTimeout(delayId)
+      clearInterval(timerId)
+    }
+  }, [movement.id, movement.seconds, shouldRunTimer])
+
+  // 🔴 节拍器引擎：同样等待 4 秒开场白后再开始递增动作次数
+  useEffect(() => {
+    if (!isManual || timed) return
+    let timerId: number
+    const delayId = setTimeout(() => {
+      timerId = window.setInterval(() => {
+        setManualRep(r => {
+          if (r >= target) {
+            clearInterval(timerId)
+            return r
+          }
+          return r + 1
+        })
+      }, 3500) // 3.5秒一个动作，节奏适中
+    }, 4000) // 等待 4 秒开场白
+    
+    return () => {
+      clearTimeout(delayId)
+      clearInterval(timerId)
+    }
+  }, [isManual, timed, target])
+
+  const speak = useCallback((text: string) => {
+    if (!voiceOn || typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    window.speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'en-US'
+    u.rate = 1.05
+    window.speechSynthesis.speak(u)
+  }, [voiceOn])
+
+  // 1. 新动作开场白
+  useEffect(() => {
+    if (!shouldRunTimer || !voiceOn || announcedIdRef.current === movement.id) return
+    
+    let text = `${movement.name}. `
+    if (movement.reps) text += `Do ${movement.reps} reps. `
+    if (movement.seconds) text += `Hold for ${movement.seconds} seconds. `
+    text += `${movement.cues[0]}. ${movement.cues[1]}.`
+    
+    speak(text)
+    announcedIdRef.current = movement.id
+  }, [movement.id, movement.name, movement.reps, movement.seconds, movement.cues, speak, voiceOn, shouldRunTimer])
+
+  // 2. 摄像头工作时的精准反馈
+  useEffect(() => {
+    if (!voiceOn || isManual || timed || !out) return
+    const done = target > 0 && out.reps >= target
+
+    if (out.counted && out.reps !== lastSpokenRep.current) {
+      lastSpokenRep.current = out.reps
+      if (done) {
+        speak('Done. Excellent work.')
+      } else if (out.cue) {
+        speak(`${out.reps}. ${out.cue}`)
+      } else {
+        const ENCOURAGEMENTS = ["Great job.", "Keep it up.", "Nice form."]
+        const cheer = (out.reps % 3 === 0 || out.reps === 1) 
+          ? ` ${ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]}` : ''
+        speak(`${out.reps}.${cheer}`)
+      }
+      lastSpokenCue.current = out.cue
+      return
+    }
+
+    if (out.cue && out.cue !== lastSpokenCue.current && !out.counted) {
+      speak(out.cue)
+      lastSpokenCue.current = out.cue
+    } else if (!out.cue) {
+      lastSpokenCue.current = null
+    }
+  }, [status, out, timed, voiceOn, isManual, target, speak])
+
+  // 3. 脱机模式的自动报数、动作指导与随机鼓励
+  useEffect(() => {
+    if (!voiceOn || !isManual || timed || manualRep === 0) return
+    if (manualRep === lastSpokenRep.current) return
+    lastSpokenRep.current = manualRep
+
+    if (manualRep === target) {
+      speak(`${manualRep}. Done. Great job.`)
+    } else {
+      let extra = ""
+      if (manualRep === 2) {
+        extra = ` ${movement.cues[0]}.`
+      } else if (manualRep === 4 && movement.cues[1]) {
+        extra = ` ${movement.cues[1]}.`
+      } else if (manualRep % 3 === 0) {
+        const ENCOURAGEMENTS = ["Keep going.", "Nice and steady.", "Doing great.", "Almost there."]
+        extra = ` ${ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]}`
+      }
+      speak(`${manualRep}.${extra}`)
+    }
+  }, [manualRep, isManual, timed, target, voiceOn, movement.cues, speak])
+
+  // 4. 保持类动作的关键节点（倒计时）
+  useEffect(() => {
+    if (!timed || !voiceOn || !shouldRunTimer) return
+    const total = movement.seconds ?? 0
+    const half = Math.floor(total / 2)
+    
+    if (left === half && half >= 10) {
+       const ENCOURAGEMENTS = ["Keep breathing.", "Hold it there.", "Looking good."]
+       const cheer = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
+       speak(`Halfway there. ${cheer}`)
+    } 
+    else if (left === 10 && total > 15) {
+       speak('Just 10 seconds left. Almost there.')
+    } 
+    else if (left === 0 && !timeUpSpoken.current) {
+       speak('Time is up. Well done.')
+       timeUpSpoken.current = true
+    }
+  }, [left, timed, voiceOn, shouldRunTimer, movement.seconds, speak])
+
+  const reps = isManual ? manualRep : (out?.reps ?? 0)
+  const done = target > 0 && reps >= target
 
   const feedback = useMemo(() => {
     if (out == null) return 'Stand where your whole body is in frame.'
@@ -126,33 +253,45 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   }, [checker, out])
 
   const head = (
-    <div className="coach-head">
-      <h2>{movement.name}</h2>
-      <p className="cues">
-        <span>{movement.cues[0]}</span>
-        <span>{movement.cues[1]}</span>
-      </p>
+    <div className="coach-head" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', justifyContent: 'space-between' }}>
+      <div>
+        <h2>{movement.name}</h2>
+        <p className="cues">
+          <span>{movement.cues[0]}</span>
+          <span>{movement.cues[1]}</span>
+        </p>
+      </div>
+      <button className={voiceOn ? 'chip on' : 'chip'} onClick={() => setVoiceOn((v) => !v)} style={{ flexShrink: 0 }}>
+        Voice: {voiceOn ? 'On' : 'Off'}
+      </button>
     </div>
   )
 
-  /**
-   * 🔴 没有判定器就不出摄像头。
-   * 十八个动作里只有三个有姿态判定。之前不管有没有,一律弹"Turn on the check",
-   * 用户点开之后摄像头确实打开了,但什么都不判 —— 看起来像坏的。
-   * 而且为判不了的动作白白加载 9.4MB 的模型。
-   */
-  if (!checker) {
+  if (!checker || manualMode) {
     return (
       <div className="coach">
         {head}
         <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />
-        <p className="no-check">
-          Follow the two cues. There is no camera check for this one, so nothing is watching.
+        
+        <div className="readout" style={{ justifyContent: 'center', margin: '20px 0' }}>
+          <div className="count" style={{ fontSize: '48px' }}>
+            {timed ? (
+              <><strong>{left}</strong><span style={{ fontSize: '24px' }}>s</span></>
+            ) : (
+              <><strong>{manualRep}</strong><span style={{ fontSize: '24px' }}> / {target}</span></>
+            )}
+          </div>
+        </div>
+
+        <p className="no-check" style={{ textAlign: 'center' }}>
+          {manualMode 
+            ? 'Camera check is off. Follow the pace and voice cues.'
+            : 'Follow the two cues. There is no camera check for this one.'}
         </p>
         <p className="stop-if">{movement.stopIf}</p>
         <div className="actions">
           <button className="primary" onClick={onDone}>
-            Next movement
+            {done ? 'Done — next movement' : 'Next movement'}
           </button>
         </div>
       </div>
@@ -184,8 +323,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
                 <button className="primary" onClick={start}>
                   Turn on the check
                 </button>
-                <button className="ghost" onClick={onSkip}>
-                  Do it without the check
+                <button className="ghost" onClick={() => setManualMode(true)}>
+                  Follow by voice only
                 </button>
               </>
             )}
@@ -193,8 +332,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
             {(status === 'denied' || status === 'error') && (
               <>
                 <p>{message}</p>
-                <button className="ghost" onClick={onSkip}>
-                  Carry on without it
+                <button className="ghost" onClick={() => setManualMode(true)}>
+                  Follow by voice only
                 </button>
               </>
             )}
@@ -222,10 +361,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
       {status === 'running' && (
         <p className="readout-meta">
           {out?.angle != null && movement.poseCheck && (
-            <span>
-              {out.angle}
-              {CHECK_UNIT[movement.poseCheck]}
-            </span>
+            <span>{out.angle}{CHECK_UNIT[movement.poseCheck]}</span>
           )}
           {blur && (
             <span className={blurMode === 'none' ? 'warn' : undefined}>
@@ -235,8 +371,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
           <span>
             {cameras.length} camera{cameras.length === 1 ? '' : 's'} usable
             {rawCameraCount > cameras.length && ` (${rawCameraCount} reported, rest are desk views)`}
-            {cameras.length === 1 &&
-              ' — a phone shows up here once your computer picks it up, which this page cannot do for you'}
           </span>
         </p>
       )}
@@ -251,20 +385,10 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
               Widest view
             </button>
           )}
-          {/*
-            只要有摄像头就显示,不再要求"两个以上"。
-            藏起来的话用户分不清是"只有一个摄像头"还是"这个功能坏了" —— 实测就被问到了。
-          */}
           {cameras.length > 0 && (
-            <select
-              className="chip"
-              value={cameraId ?? ''}
-              onChange={(e) => void pickCamera(e.target.value)}
-            >
+            <select className="chip" value={cameraId ?? ''} onChange={(e) => void pickCamera(e.target.value)}>
               {cameras.map((c) => (
-                <option key={c.deviceId} value={c.deviceId}>
-                  {c.label}
-                </option>
+                <option key={c.deviceId} value={c.deviceId}>{c.label}</option>
               ))}
             </select>
           )}
@@ -291,13 +415,7 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   )
 }
 
-/** 画骨架和目标圈。只画,不判断。 */
-function draw(
-  canvas: HTMLCanvasElement | null,
-  lms: Landmark[],
-  state?: CheckState,
-  checkId?: string,
-) {
+function draw(canvas: HTMLCanvasElement | null, lms: Landmark[], state?: CheckState, checkId?: string) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -305,11 +423,6 @@ function draw(
   ctx.clearRect(0, 0, w, h)
   if (lms.length === 0) return
 
-  /**
-   * 🔴 骨架画淡。
-   * 原来线又粗又亮,盖在人身上反而看不清自己在做什么,而且那些线用户也用不上 ——
-   * 真正要看的是"手离圈还有多远"。所以骨架退成背景,触点单独高亮。
-   */
   ctx.lineWidth = 2
   ctx.strokeStyle = 'rgba(120, 220, 190, 0.35)'
   for (const [a, b] of SKELETON) {
@@ -318,7 +431,6 @@ function draw(
     if (!pa || !pb) continue
     if ((pa.visibility ?? 0) < 0.5 || (pb.visibility ?? 0) < 0.5) continue
     ctx.beginPath()
-    // 镜像:前置摄像头画面是反的,画点也要跟着反,否则骨架和人对不上
     ctx.moveTo((1 - pa.x) * w, pa.y * h)
     ctx.lineTo((1 - pb.x) * w, pb.y * h)
     ctx.stroke()
@@ -332,11 +444,8 @@ function draw(
     ctx.fill()
   }
 
-  // 要用来碰目标的那个点,画大画亮,用户一眼知道该拿什么去碰
   const usesHead = checkId === 'head-target'
-  const touch = usesHead
-    ? [mid(lms[LM.leftEar], lms[LM.rightEar])]
-    : [lms[LM.leftWrist], lms[LM.rightWrist]]
+  const touch = usesHead ? [mid(lms[LM.leftEar], lms[LM.rightEar])] : [lms[LM.leftWrist], lms[LM.rightWrist]]
   if (state?.targetX != null) {
     for (const p of touch) {
       if (!p || Number.isNaN(p.x)) continue
@@ -353,16 +462,11 @@ function draw(
     }
   }
 
-  // 目标圈。和关键点用同一套镜像规则,否则圈和手对不上。
   if (state?.targetX != null && state.targetY != null) {
     const cx = (1 - state.targetX) * w
     const cy = state.targetY * h
     const r = targetRadius(checkId ?? '') * w
-
-    // 手离得越近圈越实,给一点"快碰到了"的反馈
-    const near = touch.length
-      ? Math.min(...touch.filter(Boolean).map((p) => Math.hypot((1 - p.x) * w - cx, p.y * h - cy)))
-      : Infinity
+    const near = touch.length ? Math.min(...touch.filter(Boolean).map((p) => Math.hypot((1 - p.x) * w - cx, p.y * h - cy))) : Infinity
     const close = Math.max(0, Math.min(1, 1 - (near - r) / (r * 2.5)))
 
     ctx.lineWidth = 5
