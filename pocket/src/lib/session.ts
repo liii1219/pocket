@@ -112,9 +112,14 @@ function reasonFor(m: Movement, input: SessionInput): string {
  * 编一节课。
  * 🔴 不随机:同样的输入永远得到同样的输出(可复现,方便课堂演示和测试)。
  */
-export function composeSession(input: SessionInput): Session {
-  const budget = Math.max(0, input.minutes * 60 - BUFFER_SECONDS)
-
+/**
+ * 这套设置下**能做的全部动作**,顺序和 composeSession 挑选时一致。
+ *
+ * 🔴 抽出来是给界面用的:用户要自己挑哪几个动作时,看到的候选和系统挑的是同一批、
+ * 同一个顺序。两边各自过滤迟早会对不上 —— 比如标了酸痛之后,
+ * 列表里还留着一个系统早就排除掉的动作。
+ */
+export function sessionPool(input: SessionInput): Movement[] {
   let pool = MOVEMENTS.filter((m) => isAllowed(m, input.sore, input.alone))
 
   if (input.energy === 'low') {
@@ -122,6 +127,25 @@ export function composeSession(input: SessionInput): Session {
     // 低精力时如果活动度动作够,就只用它们;不够就退回全集,不至于给个空课
     if (soft.length >= 2) pool = soft
   }
+
+  return [...pool].sort((a, b) => {
+    if (input.alone) {
+      const byStrength = Number(a.pattern === 'mobility') - Number(b.pattern === 'mobility')
+      if (byStrength !== 0) return byStrength
+    }
+    const byCheck = Number(Boolean(b.poseCheck)) - Number(Boolean(a.poseCheck))
+    if (byCheck !== 0) return byCheck
+    return a.costSeconds - b.costSeconds
+  })
+}
+
+/** 一个动作为什么在课表里。给界面用,和 composeSession 里写的是同一句。 */
+export function explain(m: Movement, input: SessionInput): string {
+  return reasonFor(m, input)
+}
+
+export function composeSession(input: SessionInput): Session {
+  const budget = Math.max(0, input.minutes * 60 - BUFFER_SECONDS)
 
   /**
    * 排序而非随机,保证可复现。
@@ -131,15 +155,7 @@ export function composeSession(input: SessionInput): Session {
    * "Just me" 和 "People nearby" 给的课几乎一样 —— visibility 这一维就白加了。
    * 有privacy的时候,能做的事就该和被人看着的时候不一样。
    */
-  const ordered = [...pool].sort((a, b) => {
-    if (input.alone) {
-      const byStrength = Number(a.pattern === 'mobility') - Number(b.pattern === 'mobility')
-      if (byStrength !== 0) return byStrength
-    }
-    const byCheck = Number(Boolean(b.poseCheck)) - Number(Boolean(a.poseCheck))
-    if (byCheck !== 0) return byCheck
-    return a.costSeconds - b.costSeconds
-  })
+  const ordered = sessionPool(input)
 
   /**
    * 去重键。

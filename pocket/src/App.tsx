@@ -8,9 +8,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea } from './lib/movements'
-import { targetsSoreArea } from './lib/movements'
+import { byId, targetsSoreArea, type Movement } from './lib/movements'
 import { MovementIcon, iconFor } from './ui/MovementIcon'
-import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
+import { composeSession, maxSessionMinutes, sessionPool, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 
 type Screen = 'landing' | 'time' | 'count' | 'session' | 'coach'
@@ -49,6 +49,12 @@ export default function App() {
   const [itemIndex, setItemIndex] = useState(0)
   const [alone, setAlone] = useState(false)
   const [count, setCount] = useState<number | null>(null)
+  /**
+   * 用户自己挑的动作。null = 用系统排的那一套。
+   * 🔴 默认 null,所以不想挑的人还是点一下就能开始 —— 第 3、4 条需求
+   * (立刻开始、不用准备)不能因为加了自主权就丢掉。挑是可选的,不是必经的一步。
+   */
+  const [picked, setPicked] = useState<string[] | null>(null)
   const [theme, toggleTheme] = useTheme()
 
   const maxMin = useMemo(
@@ -58,6 +64,12 @@ export default function App() {
 
   const effMinutes = Math.min(minutes, maxMin)
 
+  /** 这套设置下所有能做的动作,和系统挑选时同一批、同一个顺序 */
+  const pool = useMemo(
+    () => sessionPool({ minutes: effMinutes, sore, energy, alone }),
+    [effMinutes, sore, energy, alone],
+  )
+
   const session = useMemo(
     () =>
       composeSession({
@@ -66,6 +78,32 @@ export default function App() {
       }),
     [effMinutes, sore, energy, alone, count],
   )
+
+  /**
+   * 最终要练的动作。
+   * 🔴 用户挑过之后,设置一变(标了酸痛、切了精力)挑过的东西可能已经不能做了。
+   * 这里按当前 pool 过滤一遍,不让一个已被排除的动作留在课表里。
+   */
+  const plan: Movement[] = useMemo(() => {
+    if (picked == null) return session.items.map((it) => it.movement)
+    const ok = new Set(pool.map((m) => m.id))
+    return picked.filter((id) => ok.has(id)).map((id) => byId(id)).filter((m): m is Movement => !!m)
+  }, [picked, session, pool])
+
+  const planMinutes = useMemo(
+    () => Math.max(1, Math.ceil((plan.reduce((n, m) => n + m.costSeconds, 0) + 20) / 60)),
+    [plan],
+  )
+
+  /** 🔴 要了几个就得挑几个才能往前走。自动模式(count == null)不设这个要求。 */
+  const canStart = plan.length > 0 && (count == null || plan.length === count)
+
+  function togglePick(id: string) {
+    setPicked((cur) => {
+      const base = cur ?? session.items.map((it) => it.movement.id)
+      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id]
+    })
+  }
 
   /* ------------------------------------------------------------ screens */
 
@@ -154,7 +192,7 @@ export default function App() {
 
   // 🔴 全新的庆祝结束界面
   if (screen === 'coach') {
-    const item = session.items[itemIndex]
+    const item = plan[itemIndex]
     if (!item) {
       return (
         <main className="wrap landing-wrap" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '100vh', display: 'flex' }}>
@@ -196,12 +234,12 @@ export default function App() {
       //    骨架和圆圈都看不清 —— 主角反而被配角挤没了。
       <main className="wrap wide">
         <CameraCoach
-          movement={item.movement}
+          movement={item}
           onDone={() => setItemIndex((i) => i + 1)}
           onBack={() => setScreen('session')} // 🔴 从这里退回列表
         />
         <p className="progress" style={{ marginTop: '24px' }}>
-          {itemIndex + 1} of {session.items.length}
+          {itemIndex + 1} of {plan.length}
         </p>
       </main>
     )
@@ -254,65 +292,79 @@ export default function App() {
         </div>
 
         {/*
-          🔴 不再按部位分组。
-          分组标题被问了两遍"这是怎么分的" —— 一个要解释两遍的分类就是没做成。
-          它本来想解决的是"一屏八条认不出哪条管哪儿",那件事图标自己就能办到,
-          而且图标待在行里,不用把课表切成五段。
-          顺序仍然是 composeSession 定的,序号就是练习顺序。
+          🔴 候选全列出来,用户自己勾。
+          系统挑的那几个**预先勾好** —— 不想挑的人点一下 Start 就走,
+          第 3、4 条需求(立刻开始、不用准备)还在;想换的人直接点就能换。
+          只有在上一屏明确要了个数的时候,才要求数量对上才能前进。
         */}
+        <p className="pick-head">
+          {count == null ? (
+            <>Filling the time. Tap to swap anything out.</>
+          ) : plan.length === count ? (
+            <><b>{plan.length} of {count} chosen.</b> Tap to swap anything.</>
+          ) : plan.length < count ? (
+            <><b className="short">{plan.length} of {count} chosen.</b> Pick {count - plan.length} more to carry on.</>
+          ) : (
+            <><b className="short">{plan.length} of {count} chosen.</b> Take {plan.length - count} back out.</>
+          )}
+          {picked != null && (
+            <button className="linky" onClick={() => setPicked(null)}>Use the suggested set</button>
+          )}
+        </p>
+
         <ol className="plan">
-          {session.items.map((it, i) => (
-            <li key={it.movement.id}>
-              <span className="plan-order">{i + 1}</span>
-              <MovementIcon name={iconFor(it.movement)} size={20} />
-              <div className="plan-body">
-                <div className="plan-top">
-                  <strong>{it.movement.name}</strong>
-                  {it.movement.poseCheck && (
-                    <span className="cam-dot" title="The camera can check this one">
-                      <CameraGlyph />
+          {pool.map((m) => {
+            const on = plan.some((p) => p.id === m.id)
+            const order = plan.findIndex((p) => p.id === m.id) + 1
+            return (
+              <li key={m.id} className={on ? 'picked' : 'unpicked'}>
+                <button
+                  className="plan-pick"
+                  aria-pressed={on}
+                  onClick={() => togglePick(m.id)}
+                  title={on ? 'Take this one out' : 'Put this one in'}
+                >
+                  <span className="plan-order">{on ? order : ''}</span>
+                  <MovementIcon name={iconFor(m)} size={20} />
+                  <span className="plan-body">
+                    <span className="plan-top">
+                      <strong>{m.name}</strong>
+                      {m.poseCheck && (
+                        <span className="cam-dot" title="The camera can check this one">
+                          <CameraGlyph />
+                        </span>
+                      )}
+                      <span className="dose">{m.reps ? `${m.reps} reps` : `${m.seconds}s`}</span>
                     </span>
-                  )}
-                  <span className="dose">
-                    {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
+                    {targetsSoreArea(m, sore).length > 0 ? (
+                      <span className="plan-cues why">
+                        Gentle movement for the {targetsSoreArea(m, sore).join(' and ')} you marked
+                        sore. It does not load it.
+                      </span>
+                    ) : (
+                      <span className="plan-cues">{m.cues[0]} · {m.cues[1]}</span>
+                    )}
                   </span>
-                </div>
-                {targetsSoreArea(it.movement, sore).length > 0 ? (
-                  <p className="plan-cues why">{it.reason}</p>
-                ) : (
-                  <p className="plan-cues">
-                    {it.movement.cues[0]} · {it.movement.cues[1]}
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
+                </button>
+              </li>
+            )
+          })}
         </ol>
 
-        {/*
-          🔴 你在上一屏要了几个,这屏可能给不到 —— 标了酸痛之后能用的动作变少了。
-          不说的话,用户只会发现数字对不上,不知道是谁改的。
-        */}
-        {session.shortfall === 'pool' && (
-          <p className="summary warn">
-            You asked for {session.wanted}. With what you marked sore, {session.items.length}{' '}
-            {session.items.length === 1 ? 'movement fits' : 'movements fit'}.
-          </p>
-        )}
-
-        {session.items.length > 0 && (
+        {pool.length > 0 && (
           // 🔴 智能按钮：如果中途退出，按钮变为 Resume 继续
-          <button 
-            className="primary big" 
-            style={{ width: '100%', fontSize: '18px', padding: '18px', marginTop: '24px' }} 
-            onClick={() => { 
-              if (itemIndex >= session.items.length) setItemIndex(0);
-              setScreen('coach');
+          <button
+            className="primary big"
+            style={{ width: '100%', fontSize: '18px', padding: '18px', marginTop: '24px' }}
+            disabled={!canStart}
+            onClick={() => {
+              if (itemIndex >= plan.length) setItemIndex(0)
+              setScreen('coach')
             }}
           >
-            {itemIndex > 0 && itemIndex < session.items.length 
-              ? 'Resume Session' 
-              : `Start — ${session.estimatedMinutes} min`}
+            {itemIndex > 0 && itemIndex < plan.length
+              ? 'Resume Session'
+              : `Start — ${planMinutes} min`}
           </button>
         )}
       </main>
