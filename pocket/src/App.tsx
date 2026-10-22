@@ -7,7 +7,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { BodyArea } from './lib/movements'
+import type { BodyArea, Region } from './lib/movements'
+import { REGION_LABEL, regionOf } from './lib/movements'
+import { MovementIcon, iconFor } from './ui/MovementIcon'
 import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 
@@ -228,20 +230,44 @@ export default function App() {
           </div>
         </div>
 
-        <ol className="plan">
-          {session.items.map((it) => (
-            <li key={it.movement.id}>
-              <div className="plan-top">
-                <strong>{it.movement.name}</strong>
-                <span className="dose">
-                  {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
-                </span>
-              </div>
-              <p className="reason">{it.reason}</p>
-              {it.movement.poseCheck && <span className="tag">camera can check this</span>}
-            </li>
-          ))}
-        </ol>
+        {/*
+          🔴 分组只改显示,不改顺序。
+          每条左边那个数字是它在整节课里的序号 —— 按 Start 之后就是按这个数字走的。
+          没有序号的话,分组会让人以为课表被重排了。
+        */}
+        {groupByRegion(session.items).map(([region, entries]) => (
+          <section className="plan-group" key={region}>
+            <h2 className="plan-group-head">
+              <MovementIcon name={iconFor(entries[0].it.movement)} size={18} />
+              {REGION_LABEL[region]}
+              <span className="plan-group-count">{entries.length}</span>
+            </h2>
+            <ol className="plan">
+              {entries.map(({ it, order }) => (
+                <li key={it.movement.id}>
+                  <span className="plan-order">{order}</span>
+                  <div className="plan-body">
+                    <div className="plan-top">
+                      <strong>{it.movement.name}</strong>
+                      <span className="dose">
+                        {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
+                      </span>
+                    </div>
+                    {/*
+                      这里原来显示的是 it.reason —— "为什么它被排进来"。
+                      一屏八条全是同一句套话,而且用户真正想知道的是"这个动作要怎么做"。
+                      换成两条 cue,就是教练屏上会念给他听的那两句。
+                    */}
+                    <p className="plan-cues">
+                      {it.movement.cues[0]} · {it.movement.cues[1]}
+                    </p>
+                    {it.movement.poseCheck && <span className="tag">camera can check this</span>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
 
         {session.items.length > 0 && (
           // 🔴 智能按钮：如果中途退出，按钮变为 Resume 继续
@@ -393,6 +419,25 @@ export default function App() {
   }
 
   return null
+}
+
+/**
+ * 按身体部位分组,组的先后 = 组里第一个动作在课表里的位置。
+ * 这样分组读起来仍然大致顺着练习顺序,不会把最后一个动作的组顶到最前面。
+ */
+type PlanItem = ReturnType<typeof composeSession>['items'][number]
+
+function groupByRegion(
+  items: PlanItem[],
+): Array<[Region, Array<{ it: PlanItem; order: number }>]> {
+  const groups = new Map<Region, Array<{ it: PlanItem; order: number }>>()
+  items.forEach((it, i) => {
+    const r = regionOf(it.movement)
+    const bucket = groups.get(r)
+    if (bucket) bucket.push({ it, order: i + 1 })
+    else groups.set(r, [{ it, order: i + 1 }])
+  })
+  return [...groups.entries()]
 }
 
 function Chooser<T extends string>({

@@ -113,7 +113,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'shoulder-openers',
     name: 'Shoulder openers',
-    cues: ['Slow', 'Full range'],
+    cues: ['Circle both arms backwards', 'Go as wide as the shoulder allows'],
     pattern: 'mobility',
     loads: ['shoulder'],
     visibility: 'obvious', // 挥舞手臂,显眼
@@ -125,7 +125,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'calf-raise',
     name: 'Calf raise',
-    cues: ['Up slow', 'Down slower'],
+    cues: ['Rise onto your toes', 'Lower slower than you rose'],
     pattern: 'carry',
     loads: ['ankle'],
     visibility: 'obvious', // 身体整体起伏,显眼
@@ -159,7 +159,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'side-bend',
     name: 'Seated side bend',
-    cues: ['Reach long, not down', 'One side at a time'],
+    cues: ['Reach one arm up and over your head', 'Lean sideways, never forward'],
     pattern: 'mobility',
     loads: ['back'],
     visibility: 'obvious', // 躯干侧面大幅度倾斜,显眼
@@ -209,7 +209,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'eye-exercises',
     name: 'Eye exercises',
-    cues: ['Look far, then near', 'Blink fully'],
+    cues: ['Focus far, then on your thumb', 'Ten slow swaps, blink each time'],
     pattern: 'mobility',
     loads: [],
     visibility: 'discreet',
@@ -220,7 +220,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'neck-acupressure',
     name: 'Neck pressure points',
-    cues: ['Thumbs at the base of the skull', 'Press, hold, release'],
+    cues: ['Thumbs at the base of the skull', 'Press ten seconds, then release'],
     pattern: 'mobility',
     loads: ['neck'],
     visibility: 'discreet', // 类似揉脖子放松
@@ -231,7 +231,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'wrist-stretch',
     name: 'Wrist and forearm stretch',
-    cues: ['Fingers down, then up', 'Elbow straight'],
+    cues: ['Arm straight, fingers pointing down', 'Pull gently with your other hand'],
     pattern: 'mobility',
     loads: ['wrist'],
     visibility: 'discreet', // 桌面下方即可完成
@@ -253,7 +253,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'glute-squeeze',
     name: 'Seated glute squeeze',
-    cues: ['Squeeze, hold five', 'Keep breathing'],
+    cues: ['Squeeze both glutes tight', 'Hold five, then let go'],
     pattern: 'hinge',
     loads: ['hip'],
     visibility: 'discreet', // 零位移等长收缩
@@ -298,7 +298,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'desk-leg-press',
     name: 'Desk-Under Leg Press',
-    cues: ['Press thighs up against desk', 'Push hands down on thighs'],
+    cues: ['Press both thighs up into the desk', 'Hold five, then release'],
     pattern: 'push',
     loads: ['knee', 'hip'],
     visibility: 'discreet', // 桌底零位移抗阻
@@ -309,7 +309,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'prayer-press',
     name: 'Prayer Press',
-    cues: ['Palms together at chest', 'Press firmly inward'],
+    cues: ['Palms together in front of your chest', 'Press hard for five, then release'],
     pattern: 'push',
     loads: ['shoulder', 'wrist'],
     visibility: 'discreet', // 胸前零位移抗阻
@@ -320,7 +320,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'pelvic-tilt',
     name: 'Seated Pelvic Tilt',
-    cues: ['Tilt pelvis back slightly', 'Release lower back tension'],
+    cues: ['Roll your hips back, flatten the low back', 'Hold two, then release'],
     pattern: 'mobility',
     loads: ['back', 'hip'],
     visibility: 'discreet', // 极小幅度骨盆微动
@@ -331,7 +331,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'palming',
     name: 'Palming for Eyes',
-    cues: ['Rub hands to warm', 'Cover closed eyes gently'],
+    cues: ['Rub your palms until they feel warm', 'Cup them over closed eyes, twenty seconds'],
     pattern: 'mobility',
     loads: [],
     visibility: 'discreet', // 视疲劳舒缓,类似闭目养神
@@ -342,7 +342,7 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'focal-shift',
     name: '20-20-20 Focal Shift',
-    cues: ['Look 20 feet away', 'Rest your eye focus'],
+    cues: ['Look at something six metres away', 'Hold twenty seconds, then back'],
     pattern: 'mobility',
     loads: [],
     visibility: 'discreet', // 视疲劳舒缓,仅眼球运动
@@ -351,6 +351,35 @@ export const MOVEMENTS: Movement[] = [
     stopIf: 'Stop if your vision becomes heavily blurred.',
   },
 ]
+
+/**
+ * 身体分区。课表一屏能排到七八个动作,平铺下来用户得一条条读。
+ * 分区让人一眼跳到自己酸的那块。
+ *
+ * 🔴 只用来**显示分组**,不参与排课。排课顺序仍然由 composeSession 决定,
+ * 课表里每条都带着它在整节课里的序号,所以分组不会让人搞错先后。
+ */
+export type Region = 'neck' | 'shoulders' | 'arms' | 'back' | 'legs' | 'eyes'
+
+export const REGION_LABEL: Record<Region, string> = {
+  neck: 'Neck',
+  shoulders: 'Shoulders and upper back',
+  arms: 'Wrists and forearms',
+  back: 'Lower back and hips',
+  legs: 'Legs and ankles',
+  eyes: 'Eyes',
+}
+
+export function regionOf(m: Movement): Region {
+  if (m.loads.length === 0) return 'eyes'
+  // 膝/踝先判:desk-leg-press 同时压膝和髋,它属于腿而不是腰
+  if (m.loads.includes('knee') || m.loads.includes('ankle')) return 'legs'
+  if (m.loads.includes('shoulder')) return 'shoulders'
+  if (m.loads.includes('neck')) return 'neck'
+  if (m.loads.includes('wrist')) return 'arms'
+  if (m.loads.includes('back') || m.loads.includes('hip')) return 'back'
+  return 'legs'
+}
 
 export function byId(id: string): Movement | undefined {
   return MOVEMENTS.find((m) => m.id === id)

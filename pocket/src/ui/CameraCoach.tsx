@@ -239,11 +239,17 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
   const done = target > 0 && reps >= target
 
   const feedback = useMemo(() => {
-    if (out == null) return 'Stand where your whole body is in frame.'
+    // 🔴 不要一律说"全身入镜"。head-target 只需要头和肩,
+    //    叫人退到全身入镜反而让脸变小、判定更差。按动作说它自己要什么。
+    if (out == null) {
+      return movement.poseCheck
+        ? CHECK_SETUP[movement.poseCheck]
+        : 'Stand where the camera can see you.'
+    }
     if (!out.confident) return out.cue ?? 'I cannot see you well enough to check this.'
     if (out.cue) return out.cue
     return out.phase === 'down' ? 'Hold, then come back up.' : 'Good. Keep going.'
-  }, [checker, out])
+  }, [checker, out, movement.poseCheck])
 
   const head = (
     <div className="coach-head" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', justifyContent: 'space-between' }}>
@@ -305,8 +311,14 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
 
       {head}
 
-      {status !== 'running' && <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />}
-
+      {/*
+        🔴 开着检查的时候也要能看见动作指导。
+        原来写的是 status !== 'running' —— 一按"Turn on the check",示意图和
+        做法说明整块消失,屏幕上只剩自己的脸和一个数字。用户正要开始做的那一刻,
+        恰恰是最需要看"到底怎么做"的时候,结果那时候什么都没有。
+        现在它搬到画面右边常驻;窄屏上排到画面下面。
+      */}
+      <div className="stage-row">
       <div className="stage">
         <video ref={videoRef} playsInline muted className="cam" style={{ opacity: blur ? 0 : 1 }} />
         <canvas
@@ -321,7 +333,8 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
           <div className="stage-cover">
             {status === 'idle' && (
               <>
-                <p className="setup">{movement.poseCheck && CHECK_SETUP[movement.poseCheck]}</p>
+                {/* 🔴 这里原来还印一遍 CHECK_SETUP。旁边那栏已经常驻显示同一句话,
+                    而且盖板高度不够,这句常被裁掉一半。留给按钮。 */}
                 <p>Nothing leaves this device.</p>
                 <button className="primary" onClick={start}>
                   Turn on the check
@@ -344,6 +357,17 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
         )}
       </div>
 
+        <aside className="guide">
+          <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />
+          <ol className="guide-cues">
+            <li>{movement.cues[0]}</li>
+            <li>{movement.cues[1]}</li>
+          </ol>
+          {/* 🔴 这里不再印 CHECK_SETUP。MovementDiagram 的图注讲的就是同一件事,
+              而 CHECK_SETUP 留给下面那行实时反馈 —— 看不清人的时候它才有用。 */}
+        </aside>
+      </div>
+
       <div className="readout">
         <div className="count">
           {timed ? (
@@ -358,7 +382,11 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
             </>
           )}
         </div>
-        <p className={out && !out.confident ? 'feedback unsure' : 'feedback'}>{feedback}</p>
+        {/* 🔴 只有真的在判定时才显示反馈。idle 时它读的是 CHECK_SETUP,
+            和旁边那栏完全重复,屏幕上同一句话出现三次。 */}
+        {status === 'running' && (
+          <p className={out && !out.confident ? 'feedback unsure' : 'feedback'}>{feedback}</p>
+        )}
       </div>
 
       {status === 'running' && (
