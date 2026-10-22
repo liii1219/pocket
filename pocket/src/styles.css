@@ -126,6 +126,19 @@ button:active { transform: scale(.985); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 9px 13px; font-size: 14px; border-radius: 999px; }
 .chip.on { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+/*
+  🔴 酸痛不是"选中了一个好东西",不能和 Normal / Just me 共用绿色。
+  用警示色标出来,并且按钮自己带上 "sore" 两个字 —— 颜色会被误读,字不会。
+*/
+.chip.sore.on {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn); border-color: var(--warn); font-weight: 600;
+}
+.chip-tag {
+  margin-left: 7px; font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  text-transform: uppercase; opacity: .85;
+}
+.sore-summary { color: var(--muted); font-size: 13px; margin: 9px 0 0; line-height: 1.45; }
 
 .sore { margin-top: 4px; }
 

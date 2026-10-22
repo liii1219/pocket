@@ -222,18 +222,35 @@ export default function App() {
         </div>
 
         <div className="sore">
-          <p className="label">Anything sore? Tap it.</p>
+          {/*
+            🔴 这组按钮原来用的是和"Normal""Just me"同一个绿色选中态。
+            绿色读起来是"好的/正常",所以点亮一个绿色的 knee 完全可能被理解成
+            "膝盖没问题" —— 实际意思正相反。用户测试里第一个问题就是
+            "我点了是有还是没有"。
+            三处改:选中态换成警示色、按钮自己说出"sore"、下面再写一句谁被标了。
+          */}
+          <p className="label">Where does it hurt today? Tap anything sore.</p>
           <div className="chips">
-            {AREAS.map((a) => (
-              <button
-                key={a}
-                className={sore.includes(a) ? 'chip on' : 'chip'}
-                onClick={() => setSore((s) => (s.includes(a) ? s.filter((x) => x !== a) : [...s, a]))}
-              >
-                {a}
-              </button>
-            ))}
+            {AREAS.map((a) => {
+              const marked = sore.includes(a)
+              return (
+                <button
+                  key={a}
+                  className={marked ? 'chip sore on' : 'chip sore'}
+                  aria-pressed={marked}
+                  onClick={() => setSore((s) => (s.includes(a) ? s.filter((x) => x !== a) : [...s, a]))}
+                >
+                  {a}
+                  {marked && <span className="chip-tag">sore</span>}
+                </button>
+              )
+            })}
           </div>
+          <p className="sore-summary">
+            {sore.length === 0
+              ? 'Nothing marked. Tap a part only if it hurts today.'
+              : `${sore.join(', ')} marked sore. Anything that would load ${sore.length === 1 ? 'it' : 'them'} is out of the session; gentle movement for ${sore.length === 1 ? 'it' : 'them'} stays in.`}
+          </p>
         </div>
 
         {/*
