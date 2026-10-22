@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { BodyArea, Region } from './lib/movements'
-import { REGION_LABEL, regionOf, targetsSoreArea } from './lib/movements'
+import type { BodyArea } from './lib/movements'
+import { targetsSoreArea } from './lib/movements'
 import { MovementIcon, iconFor } from './ui/MovementIcon'
 import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
@@ -254,65 +254,51 @@ export default function App() {
         </div>
 
         {/*
-          🔴 分组只改显示,不改顺序。
-          每条左边那个数字是它在整节课里的序号 —— 按 Start 之后就是按这个数字走的。
-          没有序号的话,分组会让人以为课表被重排了。
+          🔴 不再按部位分组。
+          分组标题被问了两遍"这是怎么分的" —— 一个要解释两遍的分类就是没做成。
+          它本来想解决的是"一屏八条认不出哪条管哪儿",那件事图标自己就能办到,
+          而且图标待在行里,不用把课表切成五段。
+          顺序仍然是 composeSession 定的,序号就是练习顺序。
         */}
-        {groupByRegion(session.items).map(([region, entries], _i, all) => (
-          <section
-            className={worthGrouping(all, session.items.length) ? 'plan-group' : 'plan-group flat'}
-            key={region}
-          >
-            {worthGrouping(all, session.items.length) && (
-              <h2 className="plan-group-head">
-                <MovementIcon name={iconFor(entries[0].it.movement)} size={18} />
-                {REGION_LABEL[region]}
-                <span className="plan-group-count">{entries.length}</span>
-              </h2>
-            )}
-            <ol className="plan">
-              {entries.map(({ it, order }) => (
-                <li key={it.movement.id}>
-                  <span className="plan-order">{order}</span>
-                  <div className="plan-body">
-                    <div className="plan-top">
-                      <strong>{it.movement.name}</strong>
-                      {/*
-                        🔴 "camera can check this" 原来是一整行药丸标签,每条占掉一行。
-                        它要传达的只是一个是非,一个摄像头图标就够了,title 给出全句。
-                      */}
-                      {it.movement.poseCheck && (
-                        <span className="cam-dot" title="The camera can check this one">
-                          <CameraGlyph />
-                        </span>
-                      )}
-                      <span className="dose">
-                        {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
-                      </span>
-                    </div>
-                    {/*
-                      默认显示两条 cue,不显示 it.reason —— 后者在一屏里是同一句套话。
-                      🔴 但有一种情况必须解释:用户点了"脖子酸",课表里却还有脖子的动作。
-                      规则是故意的(活动度动作针对酸痛部位恰恰该做),可是屏幕上不说,
-                      用户只会觉得是 bug。这种时候改显示 reason。
-                      上一版把 reason 整个换成 cue 时,这句解释跟着丢了。
-                      🔴 一律单行 + 省略号:做法在教练屏上完整显示,这里只要能认出是哪个动作。
-                    */}
-                    {targetsSoreArea(it.movement, sore).length > 0 ? (
-                      // 🔴 解释允许两行。它要说的是"为什么你标了酸痛这条还在",
-                      //    截成一行会把后半句"它不压这个部位"切掉 —— 那正是要害。
-                      <p className="plan-cues why">{it.reason}</p>
-                    ) : (
-                      <p className="plan-cues">
-                        {it.movement.cues[0]} · {it.movement.cues[1]}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ))}
+        <ol className="plan">
+          {session.items.map((it, i) => (
+            <li key={it.movement.id}>
+              <span className="plan-order">{i + 1}</span>
+              <MovementIcon name={iconFor(it.movement)} size={20} />
+              <div className="plan-body">
+                <div className="plan-top">
+                  <strong>{it.movement.name}</strong>
+                  {it.movement.poseCheck && (
+                    <span className="cam-dot" title="The camera can check this one">
+                      <CameraGlyph />
+                    </span>
+                  )}
+                  <span className="dose">
+                    {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
+                  </span>
+                </div>
+                {targetsSoreArea(it.movement, sore).length > 0 ? (
+                  <p className="plan-cues why">{it.reason}</p>
+                ) : (
+                  <p className="plan-cues">
+                    {it.movement.cues[0]} · {it.movement.cues[1]}
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        {/*
+          🔴 你在上一屏要了几个,这屏可能给不到 —— 标了酸痛之后能用的动作变少了。
+          不说的话,用户只会发现数字对不上,不知道是谁改的。
+        */}
+        {session.shortfall === 'pool' && (
+          <p className="summary warn">
+            You asked for {session.wanted}. With what you marked sore, {session.items.length}{' '}
+            {session.items.length === 1 ? 'movement fits' : 'movements fit'}.
+          </p>
+        )}
 
         {session.items.length > 0 && (
           // 🔴 智能按钮：如果中途退出，按钮变为 Resume 继续
@@ -466,38 +452,6 @@ export default function App() {
   return null
 }
 
-/**
- * 按身体部位分组,组的先后 = 组里第一个动作在课表里的位置。
- * 这样分组读起来仍然大致顺着练习顺序,不会把最后一个动作的组顶到最前面。
- */
-type PlanItem = ReturnType<typeof composeSession>['items'][number]
-
-function groupByRegion(
-  items: PlanItem[],
-): Array<[Region, Array<{ it: PlanItem; order: number }>]> {
-  const groups = new Map<Region, Array<{ it: PlanItem; order: number }>>()
-  items.forEach((it, i) => {
-    const r = regionOf(it.movement)
-    const bucket = groups.get(r)
-    if (bucket) bucket.push({ it, order: i + 1 })
-    else groups.set(r, [{ it, order: i + 1 }])
-  })
-  return [...groups.entries()]
-}
-
-/**
- * 分组值不值得显示。
- *
- * 🔴 标了一堆酸痛部位之后,课表可能只剩五个动作,而且每个落在不同的部位 ——
- * 于是五个标题各管一个动作。那不是分类,那是给每一行加了个大标题,
- * 高度翻倍,可读性反而更差。只有当分组真的把东西归拢了才显示它。
- */
-function worthGrouping(
-  groups: Array<[Region, Array<{ it: PlanItem; order: number }>]>,
-  total: number,
-): boolean {
-  return total >= 6 && groups.some(([, g]) => g.length >= 2)
-}
 
 /** 课表里那个小摄像头。只说明"这条能被检查",不占一整行。 */
 function CameraGlyph() {
