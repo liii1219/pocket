@@ -190,7 +190,9 @@ export default function App() {
     }
 
     return (
-      <main className="wrap">
+      // 🔴 教练屏也用宽版心。指导栏搬到画面旁边之后,560px 的版心把画面挤到 290px 宽,
+      //    骨架和圆圈都看不清 —— 主角反而被配角挤没了。
+      <main className="wrap wide">
         <CameraCoach
           movement={item.movement}
           onDone={() => setItemIndex((i) => i + 1)}

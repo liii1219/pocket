@@ -225,8 +225,13 @@ button:active { transform: scale(.985); }
 .diagram .arrow svg { width: 34px; height: 20px; }
 
 /* ---------- 摄像头旁边的常驻指导 ---------- */
-.stage-row { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 14px; align-items: start; }
+/* 🔴 画面优先。指导栏固定 200px,剩下的全给摄像头;
+   窄屏直接排到画面下面,不跟它抢宽度。 */
+.stage-row { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 14px; align-items: start; }
 @media (max-width: 760px) { .stage-row { grid-template-columns: 1fr; } }
+.stage-row .diagram { padding: 8px 6px; }
+.stage-row .diagram svg { width: 64px; height: 80px; }
+.stage-row .diagram figure { flex: 0 0 64px; }
 .guide { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .guide-cues {
   margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px;
