@@ -61,6 +61,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 课表屏:够宽时两列排得下,不用一路往下滑 */
+.wrap.wide { max-width: 760px; }
+
 .wrap {
   max-width: 560px;
   margin: 0 auto;
@@ -126,33 +129,47 @@ button:active { transform: scale(.985); }
 
 .sore { margin-top: 4px; }
 
-.plan { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+/*
+  🔴 课表要在一两屏里看完。
+  九个动作排成九张高卡片的时候,用户在测试里一路往下滑,滑到底也没数清有几个。
+  三件事把它压下来:够宽就分两列、每条固定两行、摄像头标记从药丸换成图标。
+*/
+.plan {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;
+}
 .plan li {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-  padding: 12px 14px; box-shadow: var(--shadow);
-  display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 9px 12px; box-shadow: var(--shadow);
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start;
 }
 .plan-body { min-width: 0; }
 /* 序号:它在整节课里的第几个,不是组内编号 */
 .plan-order {
-  font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
-  line-height: 1.5; text-align: right;
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+  line-height: 1.7; text-align: right;
 }
-.plan-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.dose { color: var(--accent); font-size: 14px; white-space: nowrap; }
+.plan-top { display: flex; align-items: baseline; gap: 7px; }
+.plan-top strong { font-size: 15px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dose { color: var(--accent); font-size: 13px; white-space: nowrap; margin-left: auto; }
+.cam-dot { color: var(--accent); display: inline-flex; align-self: center; flex: 0 0 auto; }
 .reason { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
-.plan-cues { color: var(--muted); font-size: 14px; margin: 5px 0 0; line-height: 1.45; }
+/* 🔴 永远一行。做法在教练屏上完整显示,这里只要能认出是哪个动作。 */
+.plan-cues {
+  color: var(--muted); font-size: 13px; margin: 1px 0 0; line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ---------- 课表分组 ---------- */
-.plan-group { margin-top: 18px; }
+.plan-group { margin-top: 14px; }
 .plan-group-head {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 0 8px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 7px;
+  margin: 0 0 6px; font-size: 12px; font-weight: 600;
   letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
 }
 .plan-group-count {
-  margin-left: auto; font-size: 12px; font-weight: 500; letter-spacing: 0;
-  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px;
+  margin-left: auto; font-size: 11px; font-weight: 500; letter-spacing: 0;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px;
 }
 .mv-icon { flex: 0 0 auto; }
 .tag { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--accent); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }

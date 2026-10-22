@@ -206,7 +206,9 @@ export default function App() {
   // 列表/详情概览
   if (screen === 'session') {
     return (
-      <main className="wrap">
+      // 🔴 课表这一屏用宽版心。560px 的单栏容器塞不下两列,
+      //    九个动作就只能竖着排一长条 —— 这正是用户抱怨要滑半天的原因。
+      <main className="wrap wide">
         <button className="back" onClick={() => setScreen('count')}>← Back</button>
         <h1>{session.headline}</h1>
 
@@ -249,19 +251,27 @@ export default function App() {
                   <div className="plan-body">
                     <div className="plan-top">
                       <strong>{it.movement.name}</strong>
+                      {/*
+                        🔴 "camera can check this" 原来是一整行药丸标签,每条占掉一行。
+                        它要传达的只是一个是非,一个摄像头图标就够了,title 给出全句。
+                      */}
+                      {it.movement.poseCheck && (
+                        <span className="cam-dot" title="The camera can check this one">
+                          <CameraGlyph />
+                        </span>
+                      )}
                       <span className="dose">
                         {it.movement.reps ? `${it.movement.reps} reps` : `${it.movement.seconds}s`}
                       </span>
                     </div>
                     {/*
-                      这里原来显示的是 it.reason —— "为什么它被排进来"。
-                      一屏八条全是同一句套话,而且用户真正想知道的是"这个动作要怎么做"。
-                      换成两条 cue,就是教练屏上会念给他听的那两句。
+                      显示的是两条 cue,不是 it.reason —— 后者在一屏里是同一句套话。
+                      🔴 强制单行 + 省略号:做法在教练屏上会完整显示,这里只是让人认出是哪个动作。
+                      一条动作换行到两三行,九个动作就又要滑半天。
                     */}
                     <p className="plan-cues">
                       {it.movement.cues[0]} · {it.movement.cues[1]}
                     </p>
-                    {it.movement.poseCheck && <span className="tag">camera can check this</span>}
                   </div>
                 </li>
               ))}
@@ -438,6 +448,17 @@ function groupByRegion(
     else groups.set(r, [{ it, order: i + 1 }])
   })
   return [...groups.entries()]
+}
+
+/** 课表里那个小摄像头。只说明"这条能被检查",不占一整行。 */
+function CameraGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 8.5h3.5L8 6.5h8l1.5 2H21v11H3z" />
+      <circle cx="12" cy="14" r="3.4" />
+    </svg>
+  )
 }
 
 function Chooser<T extends string>({
