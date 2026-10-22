@@ -23,12 +23,26 @@ describe('composeSession', () => {
     expect(s.headline).toMatch(/Take the gap off/)
   })
 
-  it('报了酸痛的部位不会被压到', () => {
+  it('报了酸痛的部位不会被力量动作压到', () => {
     const s = composeSession({ ...base, minutes: 20, sore: ['knee', 'hip'] })
+    expect(s.items.length).toBeGreaterThan(0)
     for (const i of s.items) {
+      // 🔴 断言的是"力量动作不压酸痛部位",不是"酸痛部位完全不出现"。
+      // 原来写成后者,因为当时库里碰巧没有压到髋的活动度动作。
+      // 加进 pelvic-tilt(mobility, loads: back+hip)之后这条就红了 ——
+      // 红的是断言,不是代码:isAllowed 一直都故意保留针对酸痛部位的活动度动作。
+      if (i.movement.pattern === 'mobility') continue
       expect(i.movement.loads).not.toContain('knee')
       expect(i.movement.loads).not.toContain('hip')
     }
+  })
+
+  it('酸痛部位的活动度动作反而要留下', () => {
+    const s = composeSession({ ...base, minutes: 20, sore: ['hip'] })
+    const kept = s.items.filter(
+      (i) => i.movement.pattern === 'mobility' && i.movement.loads.includes('hip'),
+    )
+    expect(kept.length).toBeGreaterThan(0)
   })
 
   it('低精力时只给活动度动作', () => {

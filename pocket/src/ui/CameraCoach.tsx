@@ -32,11 +32,11 @@ const SKELETON: Array<[number, number]> = [
 interface Props {
   movement: Movement
   onDone: () => void
-  onSkip: () => void
   onBack: () => void 
 }
 
-export function CameraCoach({ movement, onDone, onSkip, onBack }: Props) {
+/** onSkip 随两个 Skip 按钮一起删掉了;退出的路现在是 onBack 回课表。 */
+export function CameraCoach({ movement, onDone, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camCanvasRef = useRef<HTMLCanvasElement>(null)
   const [blur, setBlur] = useState(true)

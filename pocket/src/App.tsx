@@ -192,7 +192,6 @@ export default function App() {
         <CameraCoach
           movement={item.movement}
           onDone={() => setItemIndex((i) => i + 1)}
-          onSkip={() => setItemIndex((i) => i + 1)}
           onBack={() => setScreen('session')} // 🔴 从这里退回列表
         />
         <p className="progress" style={{ marginTop: '24px' }}>
