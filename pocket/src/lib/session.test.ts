@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { composeSession, maxSessionMinutes, type SessionInput } from './session'
+import { composeSession, fitsBudget, maxSessionMinutes, type SessionInput } from './session'
 import { MOVEMENTS } from './movements'
 
 const base: SessionInput = { minutes: 15, sore: [], energy: 'ok', alone: true }
+
+/**
+ * 🔴 系统自己排的那一套,永远不能自己就超预算。
+ * 用户自己挑动作之后,界面拿 fitsBudget 拦超时 —— 如果 composeSession
+ * 和它的口径不一致,一进课表屏就会看到"系统给你的课超时了",而用户什么都没动。
+ */
+describe('系统排的课和界面用的预算口径一致', () => {
+  for (const minutes of [3, 5, 8, 10, 14, 20]) {
+    it(`${minutes} 分钟排出来的课放得进 ${minutes} 分钟`, () => {
+      const s = composeSession({ ...base, minutes })
+      expect(fitsBudget(s.items.map((i) => i.movement), minutes)).toBe(true)
+    })
+  }
+})
 
 describe('composeSession', () => {
   it('同样的输入给同样的输出(可复现,不随机)', () => {

@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea } from './lib/movements'
 import { byId, targetsSoreArea, type Movement } from './lib/movements'
 import { MovementIcon, iconFor } from './ui/MovementIcon'
-import { composeSession, maxSessionMinutes, sessionPool, type Energy } from './lib/session'
+import { composeSession, fitsBudget, maxSessionMinutes, minutesFor, sessionPool, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 
 type Screen = 'landing' | 'time' | 'count' | 'session' | 'coach'
@@ -70,6 +70,21 @@ export default function App() {
     [effMinutes, sore, energy, alone],
   )
 
+  /**
+   * 标酸痛拿掉了几个动作。
+   *
+   * 🔴 用户自己挑动作之后,这组按钮唯一还在做的事就是"在你挑之前先把会压到痛处的
+   * 拿下去" —— 而这件事做完之后列表只是悄悄变短,看不出来发生过。
+   * 不说清楚,这组按钮就显得没用了。所以把数字摆出来。
+   */
+  const hiddenBySore = useMemo(
+    () =>
+      sore.length === 0
+        ? 0
+        : sessionPool({ minutes: effMinutes, sore: [], energy, alone }).length - pool.length,
+    [effMinutes, sore, energy, alone, pool],
+  )
+
   const session = useMemo(
     () =>
       composeSession({
@@ -90,13 +105,18 @@ export default function App() {
     return picked.filter((id) => ok.has(id)).map((id) => byId(id)).filter((m): m is Movement => !!m)
   }, [picked, session, pool])
 
-  const planMinutes = useMemo(
-    () => Math.max(1, Math.ceil((plan.reduce((n, m) => n + m.costSeconds, 0) + 20) / 60)),
-    [plan],
-  )
+  const planMinutes = useMemo(() => minutesFor(plan), [plan])
 
-  /** 🔴 要了几个就得挑几个才能往前走。自动模式(count == null)不设这个要求。 */
-  const canStart = plan.length > 0 && (count == null || plan.length === count)
+  /**
+   * 能不能开始。两道关,少一道都不行:
+   * - 要了几个就得挑几个(自动模式没要数,这一关不设)
+   * - 🔴 挑的东西必须放得进你说的时间。
+   *   自动模式原来完全不拦,于是十分钟的空档可以挑满十四个动作,
+   *   按钮上写着 "Start — 13 min" —— 你自己填的时长被当成没说过。
+   */
+  const overBudget = !fitsBudget(plan, effMinutes)
+  const countOk = count == null || plan.length === count
+  const canStart = plan.length > 0 && countOk && !overBudget
 
   function togglePick(id: string) {
     setPicked((cur) => {
@@ -252,7 +272,14 @@ export default function App() {
       //    九个动作就只能竖着排一长条 —— 这正是用户抱怨要滑半天的原因。
       <main className="wrap wide">
         <button className="back" onClick={() => setScreen('count')}>← Back</button>
-        <h1>{session.headline}</h1>
+        {/*
+          🔴 标题读的是 plan,不是 session。
+          原来写死 session.headline —— 用户挑到十四个,标题还在说"9 movements"。
+        */}
+        <h1>
+          {plan.length} movement{plan.length === 1 ? '' : 's'}.{' '}
+          {alone ? 'Short enough to fit the gap.' : 'None of them look like exercising.'}
+        </h1>
 
         <div className="state-row">
           <Chooser label="Energy" value={energy} onChange={setEnergy}
@@ -285,9 +312,17 @@ export default function App() {
             })}
           </div>
           <p className="sore-summary">
-            {sore.length === 0
-              ? 'Nothing marked. Tap a part only if it hurts today.'
-              : `${sore.join(', ')} marked sore. Anything that would load ${sore.length === 1 ? 'it' : 'them'} is out of the session; gentle movement for ${sore.length === 1 ? 'it' : 'them'} stays in.`}
+            {sore.length === 0 ? (
+              'Nothing marked. Tap a part only if it hurts today — anything that would load it is then taken off the list below.'
+            ) : hiddenBySore > 0 ? (
+              <>
+                <b>{hiddenBySore} movement{hiddenBySore === 1 ? '' : 's'} taken off the list</b>{' '}
+                because {sore.length === 1 ? 'it would' : 'they would'} load your {sore.join(', ')}.
+                Gentle movement for {sore.length === 1 ? 'it' : 'them'} is still there.
+              </>
+            ) : (
+              <>Nothing in the list loads your {sore.join(', ')}, so it all stays.</>
+            )}
           </p>
         </div>
 
@@ -311,6 +346,14 @@ export default function App() {
             <button className="linky" onClick={() => setPicked(null)}>Use the suggested set</button>
           )}
         </p>
+
+        {overBudget && (
+          <p className="summary warn">
+            That is about {planMinutes} minutes, and you said you had {effMinutes}. Take{' '}
+            {planMinutes - effMinutes === 1 ? 'a minute' : `${planMinutes - effMinutes} minutes`}{' '}
+            worth back out, or go back and ask for longer.
+          </p>
+        )}
 
         <ol className="plan">
           {pool.map((m) => {

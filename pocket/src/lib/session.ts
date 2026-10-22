@@ -68,6 +68,21 @@ export interface Session {
 /** 留出 1 分钟缓冲:空档到点前要能收尾,不能压着下一件事。 */
 const BUFFER_SECONDS = 60
 
+/**
+ * 一组动作放不放得进这段时间。
+ * 🔴 导出给界面用:用户自己挑动作时,必须和 composeSession 用**同一个预算口径**,
+ * 否则会出现系统排的那一套自己就超时的荒唐情况。
+ */
+export function fitsBudget(movements: Movement[], minutes: number): boolean {
+  return movements.reduce((n, m) => n + m.costSeconds, 0) <= Math.max(0, minutes * 60 - BUFFER_SECONDS)
+}
+
+/** 一组动作实际要多久(分钟,含收尾缓冲)。 */
+export function minutesFor(movements: Movement[]): number {
+  const spent = movements.reduce((n, m) => n + m.costSeconds, 0)
+  return spent === 0 ? 0 : Math.max(1, Math.ceil((spent + BUFFER_SECONDS) / 60))
+}
+
 /** 低精力时的动作顺位:只给活动度,不给发力。 */
 const LOW_ENERGY_PATTERNS = new Set(['mobility'])
 
