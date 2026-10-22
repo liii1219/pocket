@@ -118,6 +118,16 @@ export default function App() {
   const countOk = count == null || plan.length === count
   const canStart = plan.length > 0 && countOk && !overBudget
 
+  /**
+   * 🔴 改数量就等于重新提了一次要求,之前挑的那套作废。
+   * 不清掉的话会出现:第二屏滑块写 9、课表屏列着 11 —— 两屏读的是两个来源,
+   * 用户只会觉得这东西自己也不知道自己要干嘛。
+   */
+  function askForCount(n: number | null) {
+    setCount(n)
+    setPicked(null)
+  }
+
   function togglePick(id: string) {
     setPicked((cur) => {
       const base = cur ?? session.items.map((it) => it.movement.id)
@@ -221,7 +231,7 @@ export default function App() {
               <div style={{ fontSize: '64px', marginBottom: '24px' }}>🎉</div>
               <h1 style={{ fontSize: '32px', fontWeight: 750, margin: '0 0 16px' }}>Great Job!</h1>
               <p className="muted" style={{ fontSize: '16px', lineHeight: 1.6, margin: '0 auto 40px', maxWidth: '280px' }}>
-                You have completed your {session.items.length}-movement break. Thank you for taking care of your body.
+                You have completed your {plan.length}-movement break. Thank you for taking care of your body.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <button 
@@ -503,31 +513,32 @@ export default function App() {
               type="range"
               min={1}
               max={MAX_ITEMS}
-              value={count ?? session.items.length}
-              onChange={(e) => setCount(Number(e.target.value))}
+              value={count ?? plan.length}
+              onChange={(e) => askForCount(Number(e.target.value))}
             />
-            <output style={{ fontSize: '18px', fontWeight: 700 }}>{count ?? session.items.length}</output>
+            <output style={{ fontSize: '18px', fontWeight: 700 }}>{count ?? plan.length}</output>
           </div>
           <p className="alone-hint" style={{ fontSize: '15px', marginTop: '16px' }}>
             {count === null
               ? 'Filling the time you have. Drag to set it yourself.'
-              : <button className="linky" style={{ fontSize: '15px' }} onClick={() => setCount(null)}>Fill the time instead</button>}
+              : <button className="linky" style={{ fontSize: '15px' }} onClick={() => askForCount(null)}>Fill the time instead</button>}
           </p>
         </div>
 
         <div style={{ marginTop: '48px' }}>
-          {session.items.length === 0 ? (
+          {plan.length === 0 ? (
             <p className="summary warn" style={{ fontSize: '16px', lineHeight: 1.5 }}>
               Nothing fits in {minutes} min. Try going back and adding more time.
             </p>
           ) : (
             <>
               <p className="summary" style={{ margin: '0 0 20px', fontSize: '20px', fontWeight: 700 }}>
-                {session.items.length} movements, about {session.estimatedMinutes} min
+                {plan.length} movement{plan.length === 1 ? '' : 's'}, about {planMinutes} min
               </p>
-              {session.shortfall === 'pool' && (
+              {/* 🔴 和课表屏说同一件事:库里就这么多,不是设置被忽略了 */}
+              {count != null && plan.length < count && (
                 <p className="summary warn" style={{ margin: '-10px 0 20px', fontSize: '15px' }}>
-                  Only {session.items.length} movements suit this setting.
+                  You asked for {count}. Only {plan.length} suit this setting.
                 </p>
               )}
               <button 
