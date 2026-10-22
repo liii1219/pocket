@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Movement } from '../lib/movements'
-import { CHECK_SETUP, CHECK_UNIT, CHECKERS, initState, targetRadius, type CheckOutput, type CheckState } from '../lib/pose/checkers'
+import { CHECK_SETUP, CHECKERS, initState, targetRadius, type CheckOutput, type CheckState } from '../lib/pose/checkers'
 import type { Landmark } from '../lib/pose/angles'
 import { LM, mid } from '../lib/pose/angles'
 import { MovementDiagram } from './MovementDiagram'
@@ -391,9 +391,13 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
 
       {status === 'running' && (
         <p className="readout-meta">
-          {out?.angle != null && movement.poseCheck && (
-            <span>{out.angle}{CHECK_UNIT[movement.poseCheck]}</span>
-          )}
+          {/*
+            🔴 这里原来显示 out.angle —— 耸肩就是个在 55 到 75 之间跳的数字。
+            用户看不懂它,也没法拿它做任何事。而且它参与制造了最糟的那种失败:
+            次数卡在 0、旁边的数字却一直在动,用户只能猜是自己做得不对还是程序坏了。
+            这条本来就是这个组件定的规矩 —— 不显示用户看不懂的数字。
+            判定结果有 reps 和 feedback 负责,诊断信息留给虚化模式和摄像头数量。
+          */}
           {blur && (
             <span className={blurMode === 'none' ? 'warn' : undefined}>
               blur: {blurMode === 'mask' ? 'cut-out' : blurMode === 'outline' ? 'outline' : 'not working'}
