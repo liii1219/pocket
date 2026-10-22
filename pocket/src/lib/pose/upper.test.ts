@@ -210,6 +210,35 @@ describe('旋转不变性', () => {
   })
 })
 
+describe('checkShrug 的门槛跟着人走', () => {
+  /**
+   * 🔴 这一组是从实测里来的。
+   * 屏幕上显示 "0 / 12" 而旁边实时数字是 61 —— 数字在动,次数不涨。
+   * 原因是门槛写死成"偏离 8 点",而静息比值 0.61 的人要耸到 0.53 才够得着。
+   * 老用例用的是 0.75→0.55 的大摆幅,永远发现不了这件事。
+   */
+  it('静息比值偏低的人,正常幅度的耸肩也要数得到', () => {
+    const t = clock()
+    const relaxed = upper({ shrug: 0.61 })
+    const up = upper({ shrug: 0.54 })
+    let s = calibrate(checkShrug, relaxed, t)
+    s = checkShrug(up, s, t(), up)
+    const out = checkShrug(relaxed, s, t(), relaxed)
+    expect(out.reps).toBe(1)
+  })
+
+  it('静息比值偏高的人,门槛同比放大,不会变得过于好数', () => {
+    const t = clock()
+    const relaxed = upper({ shrug: 0.95 })
+    // 偏离 7 点 —— 对 0.61 的人够了,对 0.95 的人只有 7%,不到 10%
+    const small = upper({ shrug: 0.88 })
+    let s = calibrate(checkShrug, relaxed, t)
+    s = checkShrug(small, s, t(), small)
+    const out = checkShrug(relaxed, s, t(), relaxed)
+    expect(out.reps).toBe(0)
+  })
+})
+
 describe('checkShrug', () => {
   it('耸起来再放下数一次', () => {
     const t = clock()

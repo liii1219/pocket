@@ -412,8 +412,32 @@ export type PoseChecker = (
  * 放松约 0.75,耸到底约 0.55 —— 越小越到位,直接喂状态机。
  */
 const SHRUG_IDX = [LM.leftEar, LM.rightEar, LM.leftShoulder, LM.rightShoulder]
-/** 相对基线。比值×100 放松约 75,耸到底约 55,所以偏离 8 算抬起、3 以内算放下。 */
-const SHRUG_TH: Thresholds = { down: 172, up: 177, depth: 168, minMs: 1200 }
+
+/**
+ * 🔴 耸肩的门槛按**基线的比例**算,不是固定点数。
+ *
+ * 原来写死的是 { down: 172, up: 177, depth: 168 } —— 也就是"比值×100 偏离 8 算抬起"。
+ * 这个数是照着 0.75 的静息比值定的,测试里也一直用 0.75→0.55,所以一直是绿的。
+ * 但实测有人静息就是 0.61(脖子短、肩宽、或者本来就含着肩)。
+ * 要偏离 8 点,他得耸到 0.53 —— 那已经接近解剖极限了。
+ * 结果就是:屏幕上数字一直在动,次数永远是 0,用户不知道是自己做得不对还是坏了。
+ *
+ * 比值不像角度 —— 角度在人和人之间可比,比值不可比。所以门槛跟着这个人自己的基线走:
+ *   抬起 = 基线的 10%,放下 = 4% 以内,够深 = 16%。
+ * 基线取 75 时,这三个数正好回到 172.5 / 177 / 168,和原来的常数一致,老用例不受影响。
+ *
+ * 另外两个也用 deviation 的判定器(低头、转体)量的是度数,不需要这么处理。
+ */
+const SHRUG_MIN_BASE = 40
+function shrugThresholds(baseline: number | null): Thresholds {
+  const b = Math.max(SHRUG_MIN_BASE, baseline ?? 75)
+  return {
+    down: 180 - b * 0.10,
+    up: 180 - b * 0.04,
+    depth: 180 - b * 0.16,
+    minMs: 1200,
+  }
+}
 
 export function checkShrug(
   lms: Landmark[],
@@ -433,9 +457,10 @@ export function checkShrug(
   const inverted = deviation(s, scaled, false)
   if (inverted == null) return { ...s, ...CALIBRATING, angle: Math.round(scaled) }
 
-  const { counted, repMinAngle } = advance(s, inverted, t, SHRUG_TH)
+  const th = shrugThresholds(s.baseline)
+  const { counted, repMinAngle } = advance(s, inverted, t, th)
   const cue = counted
-    ? pickCue(s, repMinAngle, SHRUG_TH, 'Lift the shoulders higher, right up to the ears.', 'Let them drop slowly.')
+    ? pickCue(s, repMinAngle, th, 'Lift the shoulders higher, right up to the ears.', 'Let them drop slowly.')
     : null
   return { ...s, confident: true, cue, angle: Math.round(scaled), counted }
 }

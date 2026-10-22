@@ -97,7 +97,9 @@ export default function App() {
                 {/* 文字拆分为上下结构 */}
                 <div>
                   <strong style={{ display: 'block', fontSize: '16px', marginBottom: '4px', color: 'var(--ink)' }}>Smart Form Check</strong>
-                  <span style={{ fontSize: '15px', lineHeight: 1.5, color: 'var(--muted)' }}>Uses your camera to count reps and provide real-time guidance.</span>
+                  {/* 🔴 25 个动作里只有 10 个有判定器。写成"用摄像头数次数"是承诺了做不到的事 —— 
+                      模拟展示上被点出来的就是这类。说清楚哪些能查、剩下的怎么办。 */}
+                  <span style={{ fontSize: '15px', lineHeight: 1.5, color: 'var(--muted)' }}>Ten of the movements can be checked by your camera. The rest you follow by the cues.</span>
                 </div>
               </li>
 
