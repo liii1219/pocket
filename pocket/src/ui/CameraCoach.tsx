@@ -1,10 +1,7 @@
 /**
  * CameraCoach — 一次一个动作的摄像头页面。
  *
- * 核心升级：
- * 1. 倒计时与节拍器均加入 4 秒"开场白缓冲"，等语音介绍完、用户摆好姿势再开始计时。
- * 2. 自动节拍器：每 3.5 秒报一次数。
- * 3. 智能穿插：在第 2 次和第 4 次自动重申动作指导 (cues)，逢 3 随机鼓励。
+ * 新增了 onBack 支持，允许用户中途返回，并自动释放摄像头。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -31,13 +28,15 @@ const SKELETON: Array<[number, number]> = [
   [LM.rightKnee, LM.rightAnkle],
 ]
 
+// 🔴 新增了 onBack
 interface Props {
   movement: Movement
   onDone: () => void
   onSkip: () => void
+  onBack: () => void 
 }
 
-export function CameraCoach({ movement, onDone, onSkip }: Props) {
+export function CameraCoach({ movement, onDone, onSkip, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camCanvasRef = useRef<HTMLCanvasElement>(null)
   const [blur, setBlur] = useState(true)
@@ -113,13 +112,12 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     setLeft(movement.seconds ?? 0)
   }, [movement.id, movement.seconds])
 
-  // 🔴 倒计时引擎：加入了 4 秒延时缓冲，等开场白说完再扣时间
   useEffect(() => {
     if (!movement.seconds || !shouldRunTimer) return
     let timerId: number
     const delayId = setTimeout(() => {
       timerId = window.setInterval(() => setLeft((v) => (v > 0 ? v - 1 : 0)), 1000)
-    }, 4000) // 等待 4 秒开场白
+    }, 4000)
     
     return () => {
       clearTimeout(delayId)
@@ -127,7 +125,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     }
   }, [movement.id, movement.seconds, shouldRunTimer])
 
-  // 🔴 节拍器引擎：同样等待 4 秒开场白后再开始递增动作次数
   useEffect(() => {
     if (!isManual || timed) return
     let timerId: number
@@ -140,8 +137,8 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
           }
           return r + 1
         })
-      }, 3500) // 3.5秒一个动作，节奏适中
-    }, 4000) // 等待 4 秒开场白
+      }, 3500)
+    }, 4000)
     
     return () => {
       clearTimeout(delayId)
@@ -158,7 +155,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     window.speechSynthesis.speak(u)
   }, [voiceOn])
 
-  // 1. 新动作开场白
   useEffect(() => {
     if (!shouldRunTimer || !voiceOn || announcedIdRef.current === movement.id) return
     
@@ -171,7 +167,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     announcedIdRef.current = movement.id
   }, [movement.id, movement.name, movement.reps, movement.seconds, movement.cues, speak, voiceOn, shouldRunTimer])
 
-  // 2. 摄像头工作时的精准反馈
   useEffect(() => {
     if (!voiceOn || isManual || timed || !out) return
     const done = target > 0 && out.reps >= target
@@ -200,7 +195,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     }
   }, [status, out, timed, voiceOn, isManual, target, speak])
 
-  // 3. 脱机模式的自动报数、动作指导与随机鼓励
   useEffect(() => {
     if (!voiceOn || !isManual || timed || manualRep === 0) return
     if (manualRep === lastSpokenRep.current) return
@@ -222,7 +216,6 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
     }
   }, [manualRep, isManual, timed, target, voiceOn, movement.cues, speak])
 
-  // 4. 保持类动作的关键节点（倒计时）
   useEffect(() => {
     if (!timed || !voiceOn || !shouldRunTimer) return
     const total = movement.seconds ?? 0
@@ -270,6 +263,11 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
   if (!checker || manualMode) {
     return (
       <div className="coach">
+        {/* 🔴 中途退出按钮：调用 stop 释放摄像头，并退回列表 */}
+        <button className="back" style={{ fontSize: '16px', padding: '0 0 16px 0' }} onClick={() => { stop(); onBack(); }}>
+          ← Back
+        </button>
+
         {head}
         <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />
         
@@ -300,6 +298,11 @@ export function CameraCoach({ movement, onDone, onSkip }: Props) {
 
   return (
     <div className="coach">
+      {/* 🔴 中途退出按钮 */}
+      <button className="back" style={{ fontSize: '16px', padding: '0 0 16px 0' }} onClick={() => { stop(); onBack(); }}>
+        ← Back
+      </button>
+
       {head}
 
       {status !== 'running' && <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />}
