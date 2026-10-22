@@ -8,14 +8,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea } from './lib/movements'
-import { byId, targetsSoreArea, type Movement } from './lib/movements'
+import { byId, type Movement } from './lib/movements'
 import { MovementIcon, iconFor } from './ui/MovementIcon'
 import { composeSession, fitsBudget, maxSessionMinutes, minutesFor, sessionPool, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
 
 type Screen = 'landing' | 'time' | 'count' | 'session' | 'coach'
 
-const AREAS: BodyArea[] = ['neck', 'shoulder', 'back', 'hip', 'knee', 'ankle', 'wrist']
 const MAX_ITEMS = 12
 const THEME_KEY = 'pocket.theme.v1'
 type Theme = 'light' | 'dark'
@@ -45,7 +44,6 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('landing')
   const [minutes, setMinutes] = useState(10)
   const [energy, setEnergy] = useState<Energy>('ok')
-  const [sore, setSore] = useState<BodyArea[]>([])
   const [itemIndex, setItemIndex] = useState(0)
   const [alone, setAlone] = useState(false)
   const [count, setCount] = useState<number | null>(null)
@@ -57,41 +55,35 @@ export default function App() {
   const [picked, setPicked] = useState<string[] | null>(null)
   const [theme, toggleTheme] = useTheme()
 
+  /**
+   * 🔴 sore 恒为空。
+   * "哪儿疼"那组按钮已经去掉 —— 量过之后,默认模式下七个按钮里 ankle 一个动作都拿不掉,
+   * 另外四个各只拿掉一个(共 14 个候选)。它想解决的事(看名字不知道哪个动作压哪儿)
+   * 现在由每一行自己标出 loads 来解决,而且用户本来就自己挑动作。
+   * 库里按酸痛过滤的那条规则保留着(isAllowed + 测试),界面暂时不用它。
+   */
+  const NONE_SORE: BodyArea[] = useMemo(() => [], [])
+
   const maxMin = useMemo(
-    () => maxSessionMinutes({ sore, energy, alone }),
-    [sore, energy, alone],
+    () => maxSessionMinutes({ sore: NONE_SORE, energy, alone }),
+    [NONE_SORE, energy, alone],
   )
 
   const effMinutes = Math.min(minutes, maxMin)
 
   /** 这套设置下所有能做的动作,和系统挑选时同一批、同一个顺序 */
   const pool = useMemo(
-    () => sessionPool({ minutes: effMinutes, sore, energy, alone }),
-    [effMinutes, sore, energy, alone],
-  )
-
-  /**
-   * 标酸痛拿掉了几个动作。
-   *
-   * 🔴 用户自己挑动作之后,这组按钮唯一还在做的事就是"在你挑之前先把会压到痛处的
-   * 拿下去" —— 而这件事做完之后列表只是悄悄变短,看不出来发生过。
-   * 不说清楚,这组按钮就显得没用了。所以把数字摆出来。
-   */
-  const hiddenBySore = useMemo(
-    () =>
-      sore.length === 0
-        ? 0
-        : sessionPool({ minutes: effMinutes, sore: [], energy, alone }).length - pool.length,
-    [effMinutes, sore, energy, alone, pool],
+    () => sessionPool({ minutes: effMinutes, sore: NONE_SORE, energy, alone }),
+    [effMinutes, NONE_SORE, energy, alone],
   )
 
   const session = useMemo(
     () =>
       composeSession({
-        minutes: effMinutes, sore, energy, alone,
+        minutes: effMinutes, sore: NONE_SORE, energy, alone,
         maxItems: count ?? undefined,
       }),
-    [effMinutes, sore, energy, alone, count],
+    [effMinutes, NONE_SORE, energy, alone, count],
   )
 
   /**
@@ -296,45 +288,6 @@ export default function App() {
             options={[['ok', 'Normal'], ['low', 'Low today']]} />
         </div>
 
-        <div className="sore">
-          {/*
-            🔴 这组按钮原来用的是和"Normal""Just me"同一个绿色选中态。
-            绿色读起来是"好的/正常",所以点亮一个绿色的 knee 完全可能被理解成
-            "膝盖没问题" —— 实际意思正相反。用户测试里第一个问题就是
-            "我点了是有还是没有"。
-            三处改:选中态换成警示色、按钮自己说出"sore"、下面再写一句谁被标了。
-          */}
-          <p className="label">Where does it hurt today? Tap anything sore.</p>
-          <div className="chips">
-            {AREAS.map((a) => {
-              const marked = sore.includes(a)
-              return (
-                <button
-                  key={a}
-                  className={marked ? 'chip sore on' : 'chip sore'}
-                  aria-pressed={marked}
-                  onClick={() => setSore((s) => (s.includes(a) ? s.filter((x) => x !== a) : [...s, a]))}
-                >
-                  {a}
-                  {marked && <span className="chip-tag">sore</span>}
-                </button>
-              )
-            })}
-          </div>
-          <p className="sore-summary">
-            {sore.length === 0 ? (
-              'Nothing marked. Tap a part only if it hurts today — anything that would load it is then taken off the list below.'
-            ) : hiddenBySore > 0 ? (
-              <>
-                <b>{hiddenBySore} movement{hiddenBySore === 1 ? '' : 's'} taken off the list</b>{' '}
-                because {sore.length === 1 ? 'it would' : 'they would'} load your {sore.join(', ')}.
-                Gentle movement for {sore.length === 1 ? 'it' : 'them'} is still there.
-              </>
-            ) : (
-              <>Nothing in the list loads your {sore.join(', ')}, so it all stays.</>
-            )}
-          </p>
-        </div>
 
         {/*
           🔴 候选全列出来,用户自己勾。
@@ -389,14 +342,18 @@ export default function App() {
                       )}
                       <span className="dose">{m.reps ? `${m.reps} reps` : `${m.seconds}s`}</span>
                     </span>
-                    {targetsSoreArea(m, sore).length > 0 ? (
-                      <span className="plan-cues why">
-                        Gentle movement for the {targetsSoreArea(m, sore).join(' and ')} you marked
-                        sore. It does not load it.
-                      </span>
-                    ) : (
-                      <span className="plan-cues">{m.cues[0]} · {m.cues[1]}</span>
+                    {/*
+                      🔴 这个动作压到哪儿,写在行里。
+                      原来是上面一组"哪儿疼"的按钮在上游过滤。量过之后发现:
+                      默认模式下七个按钮里 ankle 一个动作都拿不掉,另外四个各只拿掉一个(共 14 个候选)。
+                      而它真正有用的那件事 —— "你从名字看不出 Prayer Press 压手腕" ——
+                      把信息放在行里就解决了,而且用户现在本来就自己挑动作。
+                      一个要解释的控件,换成一行看一眼就懂的信息。
+                    */}
+                    {m.loads.length > 0 && (
+                      <span className="plan-loads">{m.loads.join(' · ')}</span>
                     )}
+                    <span className="plan-cues">{m.cues[0]} · {m.cues[1]}</span>
                   </span>
                 </button>
               </li>

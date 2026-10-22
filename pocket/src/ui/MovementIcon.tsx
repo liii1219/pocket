@@ -71,86 +71,96 @@ export function iconFor(m: Movement): IconName {
  * 画法统一:24×24,只用描边,颜色继承 currentColor。
  * 不填色,这样在深浅两套主题下都不用改。
  */
+/**
+ * 画法统一:24×24,只用描边,颜色继承 currentColor。
+ *
+ * 🔴 每个图标最多五六笔。
+ * 第一版画得太细碎(脊柱四条横杠、手腕五段折线),20px 下糊成一团灰,
+ * 放大到 26px 才看得出画的是什么 —— 那说明是图本身太密,不是尺寸太小。
+ * 现在每个只保留最能认出来的那几笔。
+ */
 const PATHS: Record<IconName, JSX.Element> = {
+  // 头 + 肩,一条弧表示往侧面倒
   neck: (
     <>
-      <circle cx="12" cy="6.5" r="3.2" />
-      <path d="M7 20c0-3.2 2.2-5.5 5-5.5s5 2.3 5 5.5" />
-      <path d="M16.5 8.5c1.6 1 2.3 2.6 2 4.2" />
-      <path d="M18.9 12.9l-1.6-.6M18.9 12.9l.3-1.7" />
+      <circle cx="12" cy="6" r="3.4" />
+      <path d="M6.5 20c0-3.3 2.4-5.8 5.5-5.8s5.5 2.5 5.5 5.8" />
+      <path d="M16.8 7.4a4.6 4.6 0 0 1 1.1 4.6" />
+      <path d="M17.9 12l1.7-.5M17.9 12l-1.3-1.2" />
     </>
   ),
+  // 肩线 + 两个向上的箭头
   shoulders: (
     <>
-      <circle cx="12" cy="5.5" r="2.6" />
-      <path d="M5 16c0-3.3 3.1-5.8 7-5.8s7 2.5 7 5.8" />
-      <path d="M5 19.5h3M16 19.5h3" />
-      <path d="M6.5 7.6L5 9.1M5 9.1l1.8.2M5 9.1l.2 1.8" />
-      <path d="M17.5 7.6L19 9.1M19 9.1l-1.8.2M19 9.1l-.2 1.8" />
+      <circle cx="12" cy="6" r="3" />
+      <path d="M5 18c0-3.6 3.1-6.3 7-6.3s7 2.7 7 6.3" />
+      <path d="M5.5 8.5v-3M5.5 5.5l-1.6 1.6M5.5 5.5l1.6 1.6" />
+      <path d="M18.5 8.5v-3M18.5 5.5l-1.6 1.6M18.5 5.5l1.6 1.6" />
     </>
   ),
+  // 一条脊柱 + 一个旋转箭头
   spine: (
     <>
       <path d="M12 3.5v17" />
-      <path d="M9 6.5h6M9 10h6M9 13.5h6M9 17h6" />
-      <path d="M17.5 8.5c2 2 2 5 0 7" />
-      <path d="M17.5 15.5l1.6-.4M17.5 15.5l-.3-1.6" />
+      <path d="M9 8h6M9 14h6" />
+      <path d="M16.5 17.5a6 6 0 0 0 3-5.2" />
+      <path d="M16.5 17.5l2 .6M16.5 17.5l.3-2" />
     </>
   ),
+  // 小臂 + 手掌往下折
   wrist: (
     <>
-      <path d="M4 17.5l5-5" />
-      <path d="M9 12.5c1.6-1.6 3.6-1.9 5.2-.9" />
-      <path d="M14.2 11.6l2.1-2.1M16.3 9.5l1.9 1.9M18.2 11.4l-2.1 2.1" />
-      <path d="M10.5 15.8l2.4 2.4" />
-      <path d="M12.9 18.2c1.5 1 3 .6 4.1-.5" />
+      <path d="M4 9h7.5" />
+      <path d="M11.5 9a4 4 0 0 1 4 4v1" />
+      <path d="M15.5 14v4.5" />
+      <path d="M12.5 18.5h6" />
     </>
   ),
+  // 坐着的人:躯干 + 大腿 + 小腿
   hip: (
     <>
-      <circle cx="8.5" cy="5" r="2.4" />
-      <path d="M8.5 8v6.5h7" />
-      <path d="M8.5 14.5v5.5" />
-      <path d="M15.5 14.5c1.8-1.3 2.6-3 2.6-5" />
-      <path d="M18.1 11.2l-1.4.8M18.1 11.2l1.1 1.2" />
+      <circle cx="8" cy="5" r="2.6" />
+      <path d="M8 8v6.5h7.5" />
+      <path d="M15.5 14.5V20" />
+      <path d="M12.5 20h6" />
     </>
   ),
+  // 一条腿 + 脚
   leg: (
     <>
-      <path d="M9 3.5v6.5l4 4v6.5" />
-      <path d="M13 20.5h4" />
-      <path d="M9 10h4" />
-      <path d="M17.5 7.5c1.6 1.8 1.6 4.4 0 6.2" />
-      <path d="M17.5 13.7l1.6-.3M17.5 13.7l-.4-1.6" />
+      <path d="M9.5 3.5v7.5l4.5 4.5V20" />
+      <path d="M14 20h5" />
+      <path d="M9.5 11h4.5" />
     </>
   ),
+  // 脚掌 + 一个圆圈箭头
   ankle: (
     <>
-      <path d="M10 4v8.5" />
-      <path d="M10 12.5h6.5" />
-      <path d="M16.5 12.5v3" />
-      <ellipse cx="12.5" cy="18" rx="6" ry="2.6" />
-      <path d="M8 16.6l-1.4 1.1M6.6 17.7l1.5.9" />
+      <path d="M9.5 4v9" />
+      <path d="M9.5 13h6.5v3" />
+      <path d="M6 18.5h12" />
+      <path d="M6.5 15.2a3.4 3.4 0 1 0 1.6-1.9" />
+      <path d="M8.1 13.3l.3 2M8.1 13.3l-2 .4" />
     </>
   ),
   eye: (
     <>
       <path d="M2.5 12s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6z" />
-      <circle cx="12" cy="12" r="2.7" />
+      <circle cx="12" cy="12" r="2.8" />
     </>
   ),
+  // 两只手掌相对,中间两道表示互推
   press: (
     <>
-      <path d="M9.5 5.5v13" />
-      <path d="M14.5 5.5v13" />
-      <path d="M9.5 8.5H6.5M9.5 12H6.5M9.5 15.5H6.5" />
-      <path d="M14.5 8.5h3M14.5 12h3M14.5 15.5h3" />
-      <path d="M3.5 12h1.4M19.1 12h1.4" />
+      <path d="M9 5.5v13M15 5.5v13" />
+      <path d="M4.5 12h3M16.5 12h3" />
+      <path d="M6.6 10.1L4.5 12l2.1 1.9" />
+      <path d="M17.4 10.1L19.5 12l-2.1 1.9" />
     </>
   ),
 }
 
-export function MovementIcon({ name, size = 22 }: { name: IconName; size?: number }) {
+export function MovementIcon({ name, size = 26 }: { name: IconName; size?: number }) {
   return (
     <svg
       className="mv-icon"
@@ -159,7 +169,7 @@ export function MovementIcon({ name, size = 22 }: { name: IconName; size?: numbe
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
