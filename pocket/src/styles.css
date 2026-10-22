@@ -159,9 +159,17 @@ button:active { transform: scale(.985); }
   color: var(--muted); font-size: 13px; margin: 1px 0 0; line-height: 1.4;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 解释为什么酸痛的部位还有动作 —— 这句要读得完,给它两行 */
+.plan-cues.why {
+  white-space: normal; text-overflow: clip;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 
 /* ---------- 课表分组 ---------- */
 .plan-group { margin-top: 14px; }
+/* 不值得分组时组与组之间不留间距,整体读成一张平表 */
+.plan-group.flat { margin-top: 0; }
+.plan-group.flat + .plan-group.flat { margin-top: 8px; }
 .plan-group-head {
   display: flex; align-items: center; gap: 7px;
   margin: 0 0 6px; font-size: 12px; font-weight: 600;

@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyArea, Region } from './lib/movements'
-import { REGION_LABEL, regionOf } from './lib/movements'
+import { REGION_LABEL, regionOf, targetsSoreArea } from './lib/movements'
 import { MovementIcon, iconFor } from './ui/MovementIcon'
 import { composeSession, maxSessionMinutes, type Energy } from './lib/session'
 import { CameraCoach } from './ui/CameraCoach'
@@ -241,13 +241,18 @@ export default function App() {
           每条左边那个数字是它在整节课里的序号 —— 按 Start 之后就是按这个数字走的。
           没有序号的话,分组会让人以为课表被重排了。
         */}
-        {groupByRegion(session.items).map(([region, entries]) => (
-          <section className="plan-group" key={region}>
-            <h2 className="plan-group-head">
-              <MovementIcon name={iconFor(entries[0].it.movement)} size={18} />
-              {REGION_LABEL[region]}
-              <span className="plan-group-count">{entries.length}</span>
-            </h2>
+        {groupByRegion(session.items).map(([region, entries], _i, all) => (
+          <section
+            className={worthGrouping(all, session.items.length) ? 'plan-group' : 'plan-group flat'}
+            key={region}
+          >
+            {worthGrouping(all, session.items.length) && (
+              <h2 className="plan-group-head">
+                <MovementIcon name={iconFor(entries[0].it.movement)} size={18} />
+                {REGION_LABEL[region]}
+                <span className="plan-group-count">{entries.length}</span>
+              </h2>
+            )}
             <ol className="plan">
               {entries.map(({ it, order }) => (
                 <li key={it.movement.id}>
@@ -269,13 +274,22 @@ export default function App() {
                       </span>
                     </div>
                     {/*
-                      显示的是两条 cue,不是 it.reason —— 后者在一屏里是同一句套话。
-                      🔴 强制单行 + 省略号:做法在教练屏上会完整显示,这里只是让人认出是哪个动作。
-                      一条动作换行到两三行,九个动作就又要滑半天。
+                      默认显示两条 cue,不显示 it.reason —— 后者在一屏里是同一句套话。
+                      🔴 但有一种情况必须解释:用户点了"脖子酸",课表里却还有脖子的动作。
+                      规则是故意的(活动度动作针对酸痛部位恰恰该做),可是屏幕上不说,
+                      用户只会觉得是 bug。这种时候改显示 reason。
+                      上一版把 reason 整个换成 cue 时,这句解释跟着丢了。
+                      🔴 一律单行 + 省略号:做法在教练屏上完整显示,这里只要能认出是哪个动作。
                     */}
-                    <p className="plan-cues">
-                      {it.movement.cues[0]} · {it.movement.cues[1]}
-                    </p>
+                    {targetsSoreArea(it.movement, sore).length > 0 ? (
+                      // 🔴 解释允许两行。它要说的是"为什么你标了酸痛这条还在",
+                      //    截成一行会把后半句"它不压这个部位"切掉 —— 那正是要害。
+                      <p className="plan-cues why">{it.reason}</p>
+                    ) : (
+                      <p className="plan-cues">
+                        {it.movement.cues[0]} · {it.movement.cues[1]}
+                      </p>
+                    )}
                   </div>
                 </li>
               ))}
@@ -452,6 +466,20 @@ function groupByRegion(
     else groups.set(r, [{ it, order: i + 1 }])
   })
   return [...groups.entries()]
+}
+
+/**
+ * 分组值不值得显示。
+ *
+ * 🔴 标了一堆酸痛部位之后,课表可能只剩五个动作,而且每个落在不同的部位 ——
+ * 于是五个标题各管一个动作。那不是分类,那是给每一行加了个大标题,
+ * 高度翻倍,可读性反而更差。只有当分组真的把东西归拢了才显示它。
+ */
+function worthGrouping(
+  groups: Array<[Region, Array<{ it: PlanItem; order: number }>]>,
+  total: number,
+): boolean {
+  return total >= 6 && groups.some(([, g]) => g.length >= 2)
 }
 
 /** 课表里那个小摄像头。只说明"这条能被检查",不占一整行。 */
