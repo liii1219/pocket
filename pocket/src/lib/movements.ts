@@ -197,10 +197,12 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'neck-release',
     name: 'Neck release',
-    cues: ['Ear to shoulder', 'Breathe out'],
+    // 原本为: ['Ear to shoulder', 'Breathe out']
+    // 修改为带固定点和运动轨迹的具体描述
+    cues: ['Gently tilt ear toward shoulder', 'Keep the opposite shoulder anchored down'],
     pattern: 'mobility',
     loads: ['neck'],
-    visibility: 'discreet', // 仅歪头,类似思考
+    visibility: 'discreet',
     seconds: 40,
     costSeconds: 50,
     poseCheck: 'head-target',
@@ -342,10 +344,12 @@ export const MOVEMENTS: Movement[] = [
   {
     id: 'focal-shift',
     name: '20-20-20 Focal Shift',
-    cues: ['Look at something six metres away', 'Hold twenty seconds, then back'],
+    // 原本为: ['Look at something six metres away', 'Hold twenty seconds, then back']
+    // 增加聚焦点与眼部肌肉放松的具体视觉指令
+    cues: ['Focus on a specific target 6m away', 'Relax eye muscles and blink naturally for 20s'],
     pattern: 'mobility',
     loads: [],
-    visibility: 'discreet', // 视疲劳舒缓,仅眼球运动
+    visibility: 'discreet',
     seconds: 20,
     costSeconds: 30,
     stopIf: 'Stop if your vision becomes heavily blurred.',

@@ -1,7 +1,9 @@
 /**
  * CameraCoach — 一次一个动作的摄像头页面。
  *
- * 新增了 onBack 支持，允许用户中途返回，并自动释放摄像头。
+ * 引入了明确的执行状态机 (execState) 来区分 准备/进行中/完成。
+ * 彻底修复了切换动作时语音“串台”复读的 Bug。
+ * 摄像头模式现在也有了明确的 Start 按钮和进行中视觉反馈，不再暗中强制开始了。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -28,14 +30,12 @@ const SKELETON: Array<[number, number]> = [
   [LM.rightKnee, LM.rightAnkle],
 ]
 
-// 🔴 新增了 onBack
 interface Props {
   movement: Movement
   onDone: () => void
   onBack: () => void 
 }
 
-/** onSkip 随两个 Skip 按钮一起删掉了;退出的路现在是 onBack 回课表。 */
 export function CameraCoach({ movement, onDone, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -49,27 +49,43 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
   const stateRef = useRef<CheckState>(initState())
   const [out, setOut] = useState<CheckOutput | null>(null)
 
+  const [execState, setExecState] = useState<'ready' | 'running' | 'finished'>('ready')
+  const [left, setLeft] = useState(movement.seconds ?? 0)
+
   const lastSpokenCue = useRef<string | null>(null)
   const lastSpokenRep = useRef<number>(-1)
-  const timeUpSpoken = useRef<boolean>(false)
   const announcedIdRef = useRef<string | null>(null)
+  const finishedSpokenRef = useRef<string | null>(null)
+  const halfSpokenRef = useRef<string | null>(null)
 
-  useEffect(() => {
-    stateRef.current = initState()
+  // 🔴 核心修复：Derived State 衍生状态同步更新法
+  // 在组件 Render 阶段直接侦测 ID 变化并同步重置所有状态，彻底阻断老状态泄漏到下一次渲染，根除语音串台 Bug
+  const [prevMovementId, setPrevMovementId] = useState(movement.id)
+  if (movement.id !== prevMovementId) {
+    setPrevMovementId(movement.id)
+    setExecState('ready')
     setOut(null)
     setManualMode(false)
     setManualRep(0)
+    setLeft(movement.seconds ?? 0)
+    
+    stateRef.current = initState()
     lastSpokenCue.current = null
     lastSpokenRep.current = -1
-    timeUpSpoken.current = false
+    announcedIdRef.current = null
+    finishedSpokenRef.current = null
+    halfSpokenRef.current = null
     
+    // 立刻强行掐断上一句话的残影
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
-  }, [movement.id])
+  }
 
   const checker = movement.poseCheck ? CHECKERS[movement.poseCheck] : null
   const target = movement.reps ?? 0
+  const timed = movement.seconds != null && movement.reps == null
+  const isManual = !checker || manualMode
 
   const handleFrame = useCallback(
     (f: FrameData) => {
@@ -94,57 +110,35 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
     cameras, cameraId, pickCamera, canZoom, widen, refreshCameras, rawCameraCount,
   } = usePose(handleFrame, blur)
 
-  const isRunning = status === 'running'
-  const isManual = !checker || manualMode
-  const shouldRunTimer = isRunning || isManual
-
+  // 结课观察器
   useEffect(() => {
-    if (manualMode && out?.reps) {
-      setManualRep(out.reps)
+    if (execState !== 'running') return
+    if (timed && left === 0) {
+      setExecState('finished')
+    } else if (!timed && !isManual && target > 0 && out && out.reps >= target) {
+      setExecState('finished')
+    } else if (!timed && isManual && target > 0 && manualRep >= target) {
+      setExecState('finished')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualMode])
+  }, [execState, timed, left, isManual, target, out, manualRep])
 
-  const timed = movement.seconds != null && movement.reps == null
-  const [left, setLeft] = useState(movement.seconds ?? 0)
-  
+  // 计时器驱动
   useEffect(() => {
-    setLeft(movement.seconds ?? 0)
-  }, [movement.id, movement.seconds])
+    if (!movement.seconds || execState !== 'running') return
+    const timerId = window.setInterval(() => {
+      setLeft((v) => Math.max(0, v - 1))
+    }, 1000)
+    return () => clearInterval(timerId)
+  }, [movement.seconds, execState])
 
+  // 手动计数驱动
   useEffect(() => {
-    if (!movement.seconds || !shouldRunTimer) return
-    let timerId: number
-    const delayId = setTimeout(() => {
-      timerId = window.setInterval(() => setLeft((v) => (v > 0 ? v - 1 : 0)), 1000)
-    }, 4000)
-    
-    return () => {
-      clearTimeout(delayId)
-      clearInterval(timerId)
-    }
-  }, [movement.id, movement.seconds, shouldRunTimer])
-
-  useEffect(() => {
-    if (!isManual || timed) return
-    let timerId: number
-    const delayId = setTimeout(() => {
-      timerId = window.setInterval(() => {
-        setManualRep(r => {
-          if (r >= target) {
-            clearInterval(timerId)
-            return r
-          }
-          return r + 1
-        })
-      }, 3500)
-    }, 4000)
-    
-    return () => {
-      clearTimeout(delayId)
-      clearInterval(timerId)
-    }
-  }, [isManual, timed, target])
+    if (execState !== 'running' || !isManual || timed) return
+    const timerId = window.setInterval(() => {
+      setManualRep(r => r + 1)
+    }, 3500)
+    return () => clearInterval(timerId)
+  }, [execState, isManual, timed])
 
   const speak = useCallback((text: string) => {
     if (!voiceOn || typeof window === 'undefined' || !('speechSynthesis' in window)) return
@@ -155,27 +149,73 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
     window.speechSynthesis.speak(u)
   }, [voiceOn])
 
+  // 语音：新动作引导
   useEffect(() => {
-    if (!shouldRunTimer || !voiceOn || announcedIdRef.current === movement.id) return
-    
-    let text = `${movement.name}. `
-    if (movement.reps) text += `Do ${movement.reps} reps. `
-    if (movement.seconds) text += `Hold for ${movement.seconds} seconds. `
-    text += `${movement.cues[0]}. ${movement.cues[1]}.`
-    
-    speak(text)
-    announcedIdRef.current = movement.id
-  }, [movement.id, movement.name, movement.reps, movement.seconds, movement.cues, speak, voiceOn, shouldRunTimer])
+    if (announcedIdRef.current !== movement.id && voiceOn) {
+      let text = `${movement.name}. `
+      if (movement.reps) text += `Do ${movement.reps} reps. `
+      if (movement.seconds) text += `Hold for ${movement.seconds} seconds. `
+      text += `${movement.cues[0]}. ${movement.cues[1]}.`
+      
+      speak(text)
+      announcedIdRef.current = movement.id
+    }
+  }, [movement.id, movement.name, movement.reps, movement.seconds, movement.cues, speak, voiceOn])
 
+  // 语音：完成鼓励
   useEffect(() => {
-    if (!voiceOn || isManual || timed || !out) return
-    const done = target > 0 && out.reps >= target
+    if (execState === 'finished' && voiceOn && finishedSpokenRef.current !== movement.id) {
+       speak('Done. Excellent work.')
+       finishedSpokenRef.current = movement.id
+    }
+  }, [execState, voiceOn, movement.id, speak])
 
+  // 语音：倒计时半程与冲刺
+  useEffect(() => {
+    if (!timed || !voiceOn || execState !== 'running') return
+    const total = movement.seconds ?? 0
+    const half = Math.floor(total / 2)
+    
+    if (left === half && half >= 10 && halfSpokenRef.current !== movement.id) {
+       halfSpokenRef.current = movement.id
+       const ENCOURAGEMENTS = ["Keep breathing.", "Hold it there.", "Looking good."]
+       const cheer = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
+       speak(`Halfway there. ${cheer}`)
+    } 
+    else if (left === 10 && total > 15 && halfSpokenRef.current !== movement.id + '10s') {
+       halfSpokenRef.current = movement.id + '10s'
+       speak('Just 10 seconds left. Almost there.')
+    } 
+  }, [left, timed, voiceOn, execState, movement.seconds, speak, movement.id])
+
+  // 语音：手动模式计数
+  useEffect(() => {
+    if (!voiceOn || !isManual || timed || manualRep === 0 || execState !== 'running') return
+    if (manualRep === lastSpokenRep.current) return
+    lastSpokenRep.current = manualRep
+    if (target > 0 && manualRep >= target) return
+
+    let extra = ""
+    if (manualRep === 2) {
+      extra = ` ${movement.cues[0]}.`
+    } else if (manualRep === 4 && movement.cues[1]) {
+      extra = ` ${movement.cues[1]}.`
+    } else if (manualRep % 3 === 0) {
+      const ENCOURAGEMENTS = ["Keep going.", "Nice and steady.", "Doing great.", "Almost there."]
+      extra = ` ${ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]}`
+    }
+    speak(`${manualRep}.${extra}`)
+  }, [manualRep, isManual, timed, target, voiceOn, movement.cues, speak, execState])
+
+  // 语音：摄像头模式计数
+  useEffect(() => {
+    if (!voiceOn || isManual || timed || !out || execState !== 'running') return
+    
     if (out.counted && out.reps !== lastSpokenRep.current) {
       lastSpokenRep.current = out.reps
-      if (done) {
-        speak('Done. Excellent work.')
-      } else if (out.cue) {
+      if (target > 0 && out.reps >= target) return
+
+      if (out.cue) {
         speak(`${out.reps}. ${out.cue}`)
       } else {
         const ENCOURAGEMENTS = ["Great job.", "Keep it up.", "Nice form."]
@@ -193,54 +233,12 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
     } else if (!out.cue) {
       lastSpokenCue.current = null
     }
-  }, [status, out, timed, voiceOn, isManual, target, speak])
+  }, [out, timed, voiceOn, isManual, target, speak, execState])
 
-  useEffect(() => {
-    if (!voiceOn || !isManual || timed || manualRep === 0) return
-    if (manualRep === lastSpokenRep.current) return
-    lastSpokenRep.current = manualRep
-
-    if (manualRep === target) {
-      speak(`${manualRep}. Done. Great job.`)
-    } else {
-      let extra = ""
-      if (manualRep === 2) {
-        extra = ` ${movement.cues[0]}.`
-      } else if (manualRep === 4 && movement.cues[1]) {
-        extra = ` ${movement.cues[1]}.`
-      } else if (manualRep % 3 === 0) {
-        const ENCOURAGEMENTS = ["Keep going.", "Nice and steady.", "Doing great.", "Almost there."]
-        extra = ` ${ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]}`
-      }
-      speak(`${manualRep}.${extra}`)
-    }
-  }, [manualRep, isManual, timed, target, voiceOn, movement.cues, speak])
-
-  useEffect(() => {
-    if (!timed || !voiceOn || !shouldRunTimer) return
-    const total = movement.seconds ?? 0
-    const half = Math.floor(total / 2)
-    
-    if (left === half && half >= 10) {
-       const ENCOURAGEMENTS = ["Keep breathing.", "Hold it there.", "Looking good."]
-       const cheer = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
-       speak(`Halfway there. ${cheer}`)
-    } 
-    else if (left === 10 && total > 15) {
-       speak('Just 10 seconds left. Almost there.')
-    } 
-    else if (left === 0 && !timeUpSpoken.current) {
-       speak('Time is up. Well done.')
-       timeUpSpoken.current = true
-    }
-  }, [left, timed, voiceOn, shouldRunTimer, movement.seconds, speak])
-
-  const reps = isManual ? manualRep : (out?.reps ?? 0)
-  const done = target > 0 && reps >= target
+  // Ready 状态下强制数字显示 0，防止瞎试动作导致幽灵计数
+  const reps = execState === 'ready' ? 0 : isManual ? manualRep : (out?.reps ?? 0)
 
   const feedback = useMemo(() => {
-    // 🔴 不要一律说"全身入镜"。head-target 只需要头和肩,
-    //    叫人退到全身入镜反而让脸变小、判定更差。按动作说它自己要什么。
     if (out == null) {
       return movement.poseCheck
         ? CHECK_SETUP[movement.poseCheck]
@@ -266,10 +264,10 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
     </div>
   )
 
+  // 🔴 纯语音 / 纯动作视图渲染
   if (!checker || manualMode) {
     return (
       <div className="coach">
-        {/* 🔴 中途退出按钮：调用 stop 释放摄像头，并退回列表 */}
         <button className="back" style={{ fontSize: '16px', padding: '0 0 16px 0' }} onClick={() => { stop(); onBack(); }}>
           ← Back
         </button>
@@ -277,14 +275,50 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
         {head}
         <MovementDiagram movementId={movement.id} checkId={movement.poseCheck} />
         
-        <div className="readout" style={{ justifyContent: 'center', margin: '20px 0' }}>
-          <div className="count" style={{ fontSize: '48px' }}>
+        <div className="readout" style={{ justifyContent: 'center', margin: '20px 0', flexDirection: 'column', gap: '16px' }}>
+          <div className="count" style={{ fontSize: '64px' }}>
             {timed ? (
-              <><strong>{left}</strong><span style={{ fontSize: '24px' }}>s</span></>
+              <><strong style={{ color: execState === 'finished' ? 'var(--accent)' : 'inherit'}}>{left}</strong><span style={{ fontSize: '32px' }}>s</span></>
             ) : (
-              <><strong>{manualRep}</strong><span style={{ fontSize: '24px' }}> / {target}</span></>
+              <><strong style={{ color: execState === 'finished' ? 'var(--accent)' : 'inherit'}}>{reps}</strong><span style={{ fontSize: '32px' }}> / {target}</span></>
             )}
           </div>
+          
+          {execState === 'ready' && (
+            <button 
+              className="primary" 
+              style={{ padding: '12px 36px', fontSize: '18px', borderRadius: '999px', margin: '0 auto' }} 
+              onClick={() => {
+                 stateRef.current = initState();
+                 setOut(null);
+                 setManualRep(0);
+                 setLeft(movement.seconds ?? 0);
+                 setExecState('running');
+              }}
+            >
+              Start Movement
+            </button>
+          )}
+
+          {execState === 'running' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--accent)', fontWeight: 600, fontSize: '18px' }}>
+              <style>{`
+                @keyframes pulse-dot {
+                  0% { opacity: 1; transform: scale(1); }
+                  50% { opacity: 0.4; transform: scale(0.85); }
+                  100% { opacity: 1; transform: scale(1); }
+                }
+              `}</style>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent)', animation: 'pulse-dot 1.5s infinite ease-in-out' }} />
+              In progress
+            </div>
+          )}
+
+          {execState === 'finished' && (
+            <div style={{ color: 'var(--accent)', fontWeight: 650, fontSize: '20px' }}>
+              Completed!
+            </div>
+          )}
         </div>
 
         <p className="no-check" style={{ textAlign: 'center' }}>
@@ -294,30 +328,27 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
         </p>
         <p className="stop-if">{movement.stopIf}</p>
         <div className="actions">
-          <button className="primary" onClick={onDone}>
-            {done ? 'Done — next movement' : 'Next movement'}
+          <button 
+            className={execState === 'finished' ? "primary" : "ghost"} 
+            onClick={() => { stop(); onDone(); }}
+            style={execState !== 'finished' ? { border: '1px solid var(--line)' } : undefined}
+          >
+            {execState === 'finished' ? 'Done — next movement' : 'Skip movement'}
           </button>
         </div>
       </div>
     )
   }
 
+  // 🔴 摄像头检测视图渲染
   return (
     <div className="coach">
-      {/* 🔴 中途退出按钮 */}
       <button className="back" style={{ fontSize: '16px', padding: '0 0 16px 0' }} onClick={() => { stop(); onBack(); }}>
         ← Back
       </button>
 
       {head}
 
-      {/*
-        🔴 开着检查的时候也要能看见动作指导。
-        原来写的是 status !== 'running' —— 一按"Turn on the check",示意图和
-        做法说明整块消失,屏幕上只剩自己的脸和一个数字。用户正要开始做的那一刻,
-        恰恰是最需要看"到底怎么做"的时候,结果那时候什么都没有。
-        现在它搬到画面右边常驻;窄屏上排到画面下面。
-      */}
       <div className="stage-row">
       <div className="stage">
         <video ref={videoRef} playsInline muted className="cam" style={{ opacity: blur ? 0 : 1 }} />
@@ -333,8 +364,6 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
           <div className="stage-cover">
             {status === 'idle' && (
               <>
-                {/* 🔴 这里原来还印一遍 CHECK_SETUP。旁边那栏已经常驻显示同一句话,
-                    而且盖板高度不够,这句常被裁掉一半。留给按钮。 */}
                 <p>Nothing leaves this device.</p>
                 <button className="primary" onClick={start}>
                   Turn on the check
@@ -363,8 +392,6 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
             <li>{movement.cues[0]}</li>
             <li>{movement.cues[1]}</li>
           </ol>
-          {/* 🔴 这里不再印 CHECK_SETUP。MovementDiagram 的图注讲的就是同一件事,
-              而 CHECK_SETUP 留给下面那行实时反馈 —— 看不清人的时候它才有用。 */}
         </aside>
       </div>
 
@@ -372,32 +399,60 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
         <div className="count">
           {timed ? (
             <>
-              <strong>{left}</strong>
+              <strong style={{ color: execState === 'finished' ? 'var(--accent)' : 'inherit'}}>{left}</strong>
               <span>s</span>
             </>
           ) : (
             <>
-              <strong>{reps}</strong>
+              <strong style={{ color: execState === 'finished' ? 'var(--accent)' : 'inherit'}}>{reps}</strong>
               {target > 0 && <span> / {target}</span>}
             </>
           )}
         </div>
-        {/* 🔴 只有真的在判定时才显示反馈。idle 时它读的是 CHECK_SETUP,
-            和旁边那栏完全重复,屏幕上同一句话出现三次。 */}
-        {status === 'running' && (
-          <p className={out && !out.confident ? 'feedback unsure' : 'feedback'}>{feedback}</p>
-        )}
+        
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, justifyContent: 'center', gap: '8px' }}>
+          {/* 明确的 Start 按钮，取代之前的暗中发车 */}
+          {execState === 'ready' && status === 'running' && (
+            <button 
+              className="primary" 
+              style={{ padding: '8px 24px', fontSize: '15px', borderRadius: '999px', alignSelf: 'flex-start' }} 
+              onClick={() => {
+                stateRef.current = initState();
+                setOut(null);
+                setLeft(movement.seconds ?? 0);
+                setExecState('running');
+              }}
+            >
+              Start Movement
+            </button>
+          )}
+
+          {execState === 'running' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)', fontWeight: 600, fontSize: '15px' }}>
+              <style>{`
+                @keyframes pulse-dot {
+                  0% { opacity: 1; transform: scale(1); }
+                  50% { opacity: 0.4; transform: scale(0.85); }
+                  100% { opacity: 1; transform: scale(1); }
+                }
+              `}</style>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', animation: 'pulse-dot 1.5s infinite ease-in-out' }} />
+              In progress
+            </div>
+          )}
+
+          {execState === 'finished' ? (
+             <p className="feedback" style={{ color: 'var(--accent)', fontWeight: 650, margin: 0 }}>Completed! Excellent work.</p>
+          ) : status === 'running' ? (
+             <p className={out && !out.confident ? 'feedback unsure' : 'feedback'} style={{ margin: 0 }}>{feedback}</p>
+          ) : (
+             <p className="feedback" style={{ color: 'var(--muted)', margin: 0 }}>Turn on the camera to begin.</p>
+          )}
+        </div>
       </div>
 
       {status === 'running' && (
         <p className="readout-meta">
-          {/*
-            🔴 这里原来显示 out.angle —— 耸肩就是个在 55 到 75 之间跳的数字。
-            用户看不懂它,也没法拿它做任何事。而且它参与制造了最糟的那种失败:
-            次数卡在 0、旁边的数字却一直在动,用户只能猜是自己做得不对还是程序坏了。
-            这条本来就是这个组件定的规矩 —— 不显示用户看不懂的数字。
-            判定结果有 reps 和 feedback 负责,诊断信息留给虚化模式和摄像头数量。
-          */}
           {blur && (
             <span className={blurMode === 'none' ? 'warn' : undefined}>
               blur: {blurMode === 'mask' ? 'cut-out' : blurMode === 'outline' ? 'outline' : 'not working'}
@@ -437,13 +492,14 @@ export function CameraCoach({ movement, onDone, onBack }: Props) {
 
       <div className="actions">
         <button
-          className="primary"
+          className={execState === 'finished' ? "primary" : "ghost"}
           onClick={() => {
             stop()
             onDone()
           }}
+          style={execState !== 'finished' ? { border: '1px solid var(--line)' } : undefined}
         >
-          {done ? 'Done — next movement' : 'Next movement'}
+          {execState === 'finished' ? 'Done — next movement' : 'Skip movement'}
         </button>
       </div>
     </div>
